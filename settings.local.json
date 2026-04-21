@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat /home/nan/.openclaw/agents/main/agent/*.json)",
+      "Bash(openclaw hooks:*)",
+      "Bash(openclaw --help)",
+      "Bash(openclaw skills:*)",
+      "Bash(openclaw plugins:*)",
+      "WebFetch(domain:skillhub.cn)",
+      "Bash(npx claude-code-templates@latest --list)",
+      "Bash(clawhub inspect:*)",
+      "Bash(clawhub install:*)",
+      "Bash(env)",
+      "Bash(curl -sf http://localhost:18789/health)",
+      "Bash(clawdhub --help)",
+      "WebSearch"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+# ============================================
+# cc-sync: .gitignore for ~/.claude
+# https://github.com/ikook-wang/cc-sync
+# ============================================
+
+# === Sensitive files ===
+.credentials.json
+
+# === Local cache & temp ===
+debug/
+cache/
+ide/
+backups/
+file-history/
+image-cache/
+paste-cache/
+shell-snapshots/
+session-env/
+statsig/
+telemetry/
+todos/
+tasks/
+teams/
+plans/
+chrome/
+
+# === Local state files ===
+statsig_stable_id
+stats-cache.json
+mcp-needs-auth-cache.json
+security_warnings_state_*.json
+*.lock
+.DS_Store
+transcripts/
+config/
+
+# === Session files (selectively committed by sync.sh) ===
+projects/**/*.jsonl
+projects/**/*/
+!projects/**/memory/
+!projects/**/memory/**
+!projects/**/sessions-index.json

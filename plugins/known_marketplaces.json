@@ -1,0 +1,42 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "/home/nan/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-04-21T03:40:30.256Z"
+  },
+  "ecc": {
+    "source": {
+      "source": "github",
+      "repo": "affaan-m/everything-claude-code"
+    },
+    "installLocation": "/home/nan/.claude/plugins/marketplaces/ecc",
+    "lastUpdated": "2026-04-09T02:45:17.223Z"
+  },
+  "thedotmack": {
+    "source": {
+      "source": "github",
+      "repo": "thedotmack/claude-mem"
+    },
+    "installLocation": "/home/nan/.claude/plugins/marketplaces/thedotmack",
+    "lastUpdated": "2026-04-09T02:46:13.238Z"
+  },
+  "superpowers-marketplace": {
+    "source": {
+      "source": "github",
+      "repo": "obra/superpowers-marketplace"
+    },
+    "installLocation": "/home/nan/.claude/plugins/marketplaces/superpowers-marketplace",
+    "lastUpdated": "2026-04-09T09:13:28.215Z"
+  },
+  "karpathy-skills": {
+    "source": {
+      "source": "github",
+      "repo": "forrestchang/andrej-karpathy-skills"
+    },
+    "installLocation": "/home/nan/.claude/plugins/marketplaces/karpathy-skills",
+    "lastUpdated": "2026-04-21T03:02:10.620Z"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "plugins": {
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/nan/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7",
+        "version": "5.0.7",
+        "installedAt": "2026-04-09T09:15:32.997Z",
+        "lastUpdated": "2026-04-09T09:15:32.997Z",
+        "gitCommitSha": "917e5f53b16b115b70a3a355ed5f4993b9f8b73d"
+      }
+    ],
+    "claude-mem@thedotmack": [
+      {
+        "scope": "user",
+        "installPath": "/home/nan/.claude/plugins/cache/thedotmack/claude-mem/12.1.0",
+        "version": "12.1.0",
+        "installedAt": "2026-04-10T02:47:27.886Z",
+        "lastUpdated": "2026-04-10T02:47:27.886Z",
+        "gitCommitSha": "cde4faae2f33f92d2092ca87537b17b837fdcfb7"
+      }
+    ],
+    "andrej-karpathy-skills@karpathy-skills": [
+      {
+        "scope": "user",
+        "installPath": "/home/nan/.claude/plugins/cache/karpathy-skills/andrej-karpathy-skills/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-04-21T03:03:19.756Z",
+        "lastUpdated": "2026-04-21T03:03:19.756Z",
+        "gitCommitSha": "2c606141936f1eeef17fa3043a72095b4765b9c2"
+      }
+    ]
+  }
+}
