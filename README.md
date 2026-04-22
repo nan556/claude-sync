@@ -8,24 +8,74 @@
 - 自动管理 session 文件（只保留最近的 N 个）
 - 多设备间同步 Claude Code 配置和会话历史
 
-## 快速开始
+---
 
-### 1. 克隆仓库
+## 新设备安装
+
+### 前提条件
+
+- 已安装 Git
+- 已配置 SSH 公钥（用于访问 GitHub）
+
+### 第一步：备份现有配置（如有）
+
+```bash
+# 如果已有 .claude 目录，先备份
+mv ~/.claude ~/.claude.bak
+```
+
+### 第二步：克隆仓库到 ~/.claude
 
 ```bash
 git clone git@github.com:nan556/claude-sync.git ~/.claude
 cd ~/.claude
 ```
 
-### 2. 配置
+### 第三步：配置 Git 用户（如果需要）
 
-编辑 `sync.conf`：
+```bash
+git config user.name "Your Name"
+git config user.email "your@email.com"
+```
+
+### 第四步：初始化 git hooks（如需自动同步）
+
+```bash
+# 创建 post-commit hook
+cat > .git/hooks/post-commit << 'EOF'
+#!/bin/bash
+~/.claude/sync.sh
+EOF
+chmod +x .git/hooks/post-commit
+```
+
+### 第五步：首次同步
+
+```bash
+# 拉取远程最新配置
+git pull
+
+# 手动运行同步确认正常
+./sync.sh --verbose
+```
+
+---
+
+## 配置说明
+
+### sync.conf
 
 ```bash
 KEEP_SESSIONS=3   # 每个项目保留的 session 文件数量
 ```
 
-### 3. 手动同步
+根据需要调整保留的 session 数量。
+
+---
+
+## 使用方法
+
+### 手动同步
 
 ```bash
 # 同步到远程
@@ -35,26 +85,32 @@ KEEP_SESSIONS=3   # 每个项目保留的 session 文件数量
 ./sync.sh --verbose
 ```
 
-## 自动化
+### 自动化同步
 
-### cron 定时任务（推荐）
+#### 方式一：cron 定时任务
 
 ```bash
-# 每小时自动同步
-0 * * * * ~/.claude/sync.sh
+# 编辑 crontab
+crontab -e
 
-# 每天凌晨2点同步
-0 2 * * * ~/.claude/sync.sh
+# 添加以下内容（每小时同步一次）
+0 * * * * ~/.claude/sync.sh
 ```
 
-### Git hooks 自动推送
+#### 方式二：Git hooks 自动推送
 
-在 `.git/hooks/post-commit` 添加：
+每次 commit 后自动同步：
 
 ```bash
+# 创建 post-commit hook
+cat > .git/hooks/post-commit << 'EOF'
 #!/bin/bash
 ~/.claude/sync.sh
+EOF
+chmod +x .git/hooks/post-commit
 ```
+
+---
 
 ## 工作原理
 
@@ -64,11 +120,15 @@ KEEP_SESSIONS=3   # 每个项目保留的 session 文件数量
 4. `git add` — 暂存变更
 5. `git commit` + `git push` — 推送到远程
 
+---
+
 ## 注意事项
 
 - session 文件按修改时间排序，保留最新的 N 个
 - 较旧的 session 文件从 git 索引移除（本地文件仍保留）
 - 首次使用建议先手动运行 `./sync.sh --verbose` 确认无误
+
+---
 
 ## 项目结构
 
@@ -82,4 +142,3 @@ KEEP_SESSIONS=3   # 每个项目保留的 session 文件数量
 ├── plugins/       # 插件配置
 └── settings.json  # Claude Code 设置
 ```
-
