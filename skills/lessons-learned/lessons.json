@@ -1,0 +1,124 @@
+{
+  "lessons": [
+    {
+      "id": 1,
+      "date": "2026-04-22",
+      "category": "编程习惯",
+      "lesson": "不要用 Python 思维写其他语言",
+      "detail": "JS 的对象访问、Java 的类型系统各有各的规则，不能照搬。例如 JS 中没有 .get() 方法，re.sub() 的 flags 参数位置历史上有变化。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 2,
+      "date": "2026-04-22",
+      "category": "编程习惯",
+      "lesson": "避免重复声明变量",
+      "detail": "用 linter 检查，ESLint 能自动发现重复声明问题。const activeSessions 重复声明导致页面什么都不显示。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 3,
+      "date": "2026-04-22",
+      "category": "数据处理",
+      "lesson": "序列化数据要确认类型",
+      "detail": "从数据库/JSON 读来的字符串不一定是纯文本，可能是嵌套的序列化对象。从 SQLite 读取的 text 字段是 JSON 字符串，需要 json.loads() 解析。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 4,
+      "date": "2026-04-22",
+      "category": "数据处理",
+      "lesson": "字段命名要准确",
+      "detail": "monthly vs 5h 的差异会误导用户，命名要反映实际含义。5h 窗口不能叫 monthly。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 5,
+      "date": "2026-04-22",
+      "category": "数据处理",
+      "lesson": "数据来源要可靠",
+      "detail": "从 CLI 命令读取比读配置文件更不容易出错。MCP 服务器列表应该用 claude mcp list 而非读 mcp.json。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 6,
+      "date": "2026-04-22",
+      "category": "业务逻辑",
+      "lesson": "状态要有据可查",
+      "detail": "默认折叠/展开、选择哪个会话等状态要有明确的业务规则。内存面板有内容时应该自动展开。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 7,
+      "date": "2026-04-22",
+      "category": "健康数据分析",
+      "lesson": "核对原始数据再计算",
+      "detail": "心算容易出错，所有数据都要和原始来源逐一比对。25岁误当35岁导致最大心率全面错误。",
+      "projects": []
+    },
+    {
+      "id": 8,
+      "date": "2026-04-22",
+      "category": "健康数据分析",
+      "lesson": "不要假设数据正确",
+      "detail": "即使之前记录过，也要重新验证。静息心率 60 被误记为 70。",
+      "projects": []
+    },
+    {
+      "id": 9,
+      "date": "2026-04-22",
+      "category": "根本原则",
+      "lesson": "写代码前先理解数据流",
+      "detail": "很多 bug 源于假设了错误的数据结构或来源。API 端点重构时响应过滤导致字段丢失。",
+      "projects": ["Claude Code Monitor"]
+    },
+    {
+      "id": 10,
+      "date": "2026-04-22",
+      "category": "根本原则",
+      "lesson": "小错误会导致大后果",
+      "detail": "一个 25/35 的心算失误让所有训练建议都错了。",
+      "projects": []
+    },
+    {
+      "id": 11,
+      "date": "2026-04-22",
+      "category": "根本原则",
+      "lesson": "先理解根因再动手，不确定时先验证假设",
+      "detail": "不要靠试来猜原因。代码行为有明确的原因，分析清楚后再改。分析第1次 vs 第2次的差异是找到根因的关键。如果不确定原因，先做假设验证再修改代码。",
+      "projects": ["助听器小程序"]
+    },
+    {
+      "id": 12,
+      "date": "2026-04-22",
+      "category": "根本原则",
+      "lesson": "用户约束就是需求，不要绕过它",
+      "detail": "用户明确说不要这样做时，立即停止并分析为什么代码在尝试它、能否避免，而不是直接去掉或绕过。",
+      "projects": ["助听器小程序"]
+    },
+    {
+      "id": 13,
+      "date": "2026-04-22",
+      "category": "根本原则",
+      "lesson": "善用搜索，避免闭门造车",
+      "detail": "很多问题社区里已有解决方案，特别是微信小程序 BLE、uni-app、微信开发者工具等问题。先搜索再动手，不要闭门分析。",
+      "projects": ["助听器小程序"]
+    },
+    {
+      "id": 14,
+      "date": "2026-04-22",
+      "category": "业务逻辑",
+      "lesson": "Android BLE onBluetoothDeviceFound 不报告已连接设备",
+      "detail": "在 Android 上，onBluetoothDeviceFound 只报告新的蓝牙设备，曾通过 createBLEConnection 连接过的设备即使已断开也不再报告。解决方案是用 wx.getBluetoothDevices() 获取系统缓存设备列表。",
+      "projects": ["助听器小程序"]
+    },
+    {
+      "id": 15,
+      "date": "2026-04-22",
+      "category": "业务逻辑",
+      "lesson": "onMounted 中 await 会阻塞生命周期",
+      "detail": "在 onMounted 中使用 await 会阻塞生命周期，导致 onUnmounted 在页面还没完全挂载时就被触发。",
+      "projects": ["助听器小程序"]
+    }
+  ]
+}

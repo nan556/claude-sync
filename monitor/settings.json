@@ -1,0 +1,6 @@
+{
+  "token_poll_interval": 180,
+  "sse_poll_interval": 3,
+  "heartbeat_interval": 30,
+  "memory_display_count": 20
+}
