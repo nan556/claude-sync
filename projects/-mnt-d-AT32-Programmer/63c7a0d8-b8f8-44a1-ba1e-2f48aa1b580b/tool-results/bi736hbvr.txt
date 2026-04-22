@@ -1,0 +1,915 @@
+/**
+ **************************************************************************
+ * @file     main.c
+ * @version  v1.0.0
+ * @date     2026-03-03
+ * @brief    主程序 - 助听器编程器 (FreeRTOS版本)
+ **************************************************************************
+ */
+#include "init.h"
+#include "usb_task.h"
+#include "i2c_task.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+#include "semphr.h"
+
+/* 全局变量声明 (在init.c中定义) */
+extern uint8_t ConnI2c1_flag, ConnI2c2_flag;
+extern uint8_t I2c1_SN[], I2c2_SN[];
+extern uint8_t I2c1_MODEL[], I2c2_MODEL[];
+extern uint64_t timecunt;
+extern uint16_t framecout;
+extern uint8_t FrameFlag, FrameFinish;
+
+extern i2c_handle_type hi2c1, hi2c2;
+extern usbd_core_type usb_core_dev;
+
+/* FreeRTOS对象 */
+QueueHandle_t xCommandQueue  = NULL;
+QueueHandle_t xResponseQueue = NULL;
+SemaphoreHandle_t xUSBMutex  = NULL;
+SemaphoreHandle_t xI2CMutex  = NULL;
+
+/* 任务句柄 */
+static TaskHandle_t xUSBTaskHandle  = NULL;
+static TaskHandle_t xI2CTaskHandle  = NULL;
+static TaskHandle_t xCtrlTaskHandle = NULL;
+
+// 全局记录表，最多保存5个设备记录
+static device_record_t device_records[FLASH_MAX_RECORDS] = {0};
+static uint8_t record_count                              = 0;
+static uint8_t record_current                            = 0;
+/* 局部函数声明 */
+static void Ctrl_Task(void *pvParameters);
+void monitor_buffer_usage(void);
+void Get_eeprom_SN(void);
+
+/* 设备配置结构体 */
+typedef struct {
+    uint8_t ear_index;                    /* 0=左耳, 1=右耳 */
+    const char *ear_name;                 /* "Left" / "Right" */
+    i2c_handle_type *hi2c;                 /* I2C handle */
+    uint8_t *conn_flag;                   /* 连接标志 */
+    uint8_t *sn_buf;                      /* SN缓存 */
+    uint8_t *model_buf;                    /* 物料号缓存 */
+    uint8_t *last_sn;                      /* 上一次SN缓存 */
+    uint8_t *skip_counter;                /* 跳过计数器 */
+    uint8_t need_read;                     /* 需要读取标志 */
+} ear_config_t;
+
+/* 通用设备处理函数 */
+static uint8_t process_ear_device(const ear_config_t *cfg,
+                                   uint8_t *current_sn,
+                                   uint8_t *current_model,
+                                   uint8_t *skip_counter,
+                                   uint8_t need_read);
+
+#if FACTORY_VERSION
+static uint8_t process_ear_device_factory(const ear_config_t *cfg,
+                                            uint8_t *current_sn,
+                                            uint8_t *current_model,
+                                            uint8_t *skip_counter);
+#endif
+
+/**
+ * @brief 验证SN的前两个字节是否为字母 (A-Z, a-z)
+ * @param sn 指向SN字节数组的指针
+ * @return 1-有效（是字母），0-无效
+ */
+uint8_t is_sn_valid(uint8_t *sn)
+{
+    // 检查前两个字节是否为字母 (ASCII: A-Z 65-90, a-z 97-122)
+    if ((sn[0] >= 'A' && sn[0] <= 'Z') || (sn[0] >= 'a' && sn[0] <= 'z')) {
+        if ((sn[1] >= 'A' && sn[1] <= 'Z') || (sn[1] >= 'a' && sn[1] <= 'z')) {
+            LOGI("SN first two letters: 0x%02X('%c'), 0x%02X('%c')", sn[0], sn[0], sn[1], sn[1]);
+            return 1; // 有效
+        }
+    }
+    LOGW("SN first two letters is err: 0x%02X, 0x%02X", sn[0], sn[1]);
+    return 0; // 无效
+}
+
+/**
+ * @brief 根据SN在记录表中查找记录
+ * @param sn 要查找的序列号
+ * @return 记录索引，-1表示未找到
+ */
+int find_record_by_sn(uint8_t *sn)
+{
+    for (int i = 0; i < FLASH_MAX_RECORDS; i++) {
+        if (memcmp(device_records[i].sn, sn, SN_SIZE) == 0) {
+            return i; // 找到匹配的记录
+        }
+    }
+    return -1; // 未找到
+}
+
+/**
+ * @brief 增强的物料号验证函数
+ * @param model 当前读取的物料号
+ * @param sn 设备的SN（可选，用于查找存储记录）
+ * @return 1-有效，0-无效
+ */
+uint8_t is_model_valid(uint8_t *model, uint8_t *sn)
+{
+    // 1. 先进行基本检查
+    uint8_t all_ff         = 1;
+    uint8_t all_00         = 1;
+    uint8_t has_valid_data = 0;
+
+    for (int i = 0; i < MODEL_LEN; i++) {
+        if (model[i] != 0xFF) all_ff = 0;
+        if (model[i] != 0x00) all_00 = 0;
+        if (model[i] != 0xFF && model[i] != 0x00) has_valid_data = 1;
+    }
+
+    if (all_ff || all_00) {
+        LOGW("Model is all 0xFF or all 0x00");
+        return 0;
+    }
+
+    if (model[0] != 0x11) {
+        LOGW("MODLE [0] is err======");
+        return 0;
+    }
+
+    if (model[2] == 0 && model[3] == 0) {
+        LOGE("is_model_valid is all 0x00=============");
+        return 0;
+    }
+
+    // 2. 如果提供了SN，查找存储的记录
+    if (sn != NULL) {
+        int record_idx = find_record_by_sn(sn);
+        if (record_idx >= 0) {
+            // 比较物料号
+            uint8_t models_match = 1;
+            for (int i = 0; i < MODEL_LEN; i++) {
+                if (model[i] != device_records[record_idx].model[i]) {
+                    models_match = 0;
+                    break;
+                }
+            }
+
+            if (models_match) {
+                LOGI("Model matches stored record");
+                uint8_t current_sn[SN_LEN] = {0};
+                memcpy(current_sn, sn, SN_LEN);
+                LOGW("sn: %02X%02X%02X%02X%02X%02X%02X%02X",
+                     current_sn[0], current_sn[1], current_sn[2], current_sn[3],
+                     current_sn[4], current_sn[5], current_sn[6], current_sn[7]);
+                return 1;
+            } else {
+                LOGW("Model does NOT match stored record");
+                return 0;
+            }
+        }
+    }
+    // LOGI("No matching SN record found, but model has valid data");
+    // 3. 没有SN或没有记录，使用原来的逻辑
+    return has_valid_data;
+}
+
+/**
+ * @brief 添加或更新记录
+ * @param sn 序列号
+ * @param model 物料号
+ * @return 记录索引，-1表示未保存（SN无效或未找到），-2表示SN格式无效
+ */
+int add_or_update_record(uint8_t *sn, uint8_t *model)
+{
+    // 1. 新增：检查SN前两位是否为字母
+    if (!is_sn_valid(sn)) {
+        // LOGW("SN first two letters is err");
+        return -2; // 返回-2表示因SN无效而未保存
+    }
+
+    int idx = find_record_by_sn(sn);
+
+    if (idx >= 0) {
+        // 更新现有记录
+        if (model != NULL) {
+            memcpy(device_records[idx].model, model, MODEL_LEN);
+            device_records[idx].model_valid = 1;
+            LOGI("===============UPDATE RECORD====================");
+        }
+        return idx;
+    } else {
+        // 添加新记录
+        if (record_count < FLASH_MAX_RECORDS || record_current < FLASH_MAX_RECORDS) {
+            idx = record_current;
+            record_count++;
+            record_current++;
+            if (record_count >= FLASH_MAX_RECORDS) record_count = FLASH_MAX_RECORDS;
+            if (record_current >= FLASH_MAX_RECORDS) record_current = 0;
+        }
+
+        memcpy(device_records[idx].sn, sn, SN_LEN);
+        device_records[idx].sn_valid = 1;
+
+        if (model != NULL) {
+            memcpy(device_records[idx].model, model, MODEL_LEN);
+            device_records[idx].model_valid = 1;
+        } else {
+            device_records[idx].model_valid = 0;
+        }
+
+        return idx;
+    }
+}
+
+/**
+ * @brief  独立看门狗喂狗任务
+ * @note   此任务不依赖任何标志、信号量或中断。
+ *         它以固定周期（如300ms，远小于1秒超时）无条件喂狗。
+ *         这是系统最后的、最可靠的保障。
+ */
+void Watchdog_Feed_Task(void *pvParameters)
+{
+    TickType_t xLastWakeTime    = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(300); // 300ms周期
+    static uint32_t feed_count  = 0;
+
+    for (;;) {
+
+        wdt_counter_reload();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
+
+void TMR1_OVF_TMR10_IRQHandler(void)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    tmr_flag_clear(TMR1, TMR_OVF_FLAG);
+    timecunt++;
+    // wdt_counter_reload();
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+static void Test_task(void *pvParameters)
+{
+    TickType_t xLastWakeTime    = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(10);
+
+    LOGI("Control Task Started");
+    static uint8_t skip_sn_read_counter = 0;
+    static uint32_t run_count           = 0;
+    uint8_t read_byte                   = 0;
+    for (;;) {
+
+        /* 固定周期延时 */
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
+
+int main(void)
+{
+    /* 系统初始化 */
+    System_Init();
+
+    /* 打印上次复位原因，使用 CRM flag 代替 RCU */
+
+    // if (crm_flag_get(CRM_POR_RESET_FLAG) != RESET) LOGI("Reset cause: POR/PDR");
+    // if (crm_flag_get(CRM_NRST_RESET_FLAG) != RESET) LOGI("Reset cause: NRST pin");
+    // if (crm_flag_get(CRM_SW_RESET_FLAG) != RESET) LOGI("Reset cause: Software");
+    // if (crm_flag_get(CRM_WDT_RESET_FLAG) != RESET) LOGI("Reset cause: Independent WDT");
+    // if (crm_flag_get(CRM_WWDT_RESET_FLAG) != RESET) LOGI("Reset cause: Window WDT");
+    // if (crm_flag_get(CRM_LOWPOWER_RESET_FLAG) != RESET) LOGI("Reset cause: Low-power");
+    // /* 清除所有复位标志，以便下次检测 */
+    // crm_flag_clear(CRM_ALL_RESET_FLAG);
+    // test_flash_store();
+    LOGI("=== Hearing Aid Programmer (FreeRTOS) Starting ===");
+    LOGI("System Clock: %lu Hz", system_core_clock);
+#if !FACTORY_VERSION
+    flash_store_init();
+    // LOG("flash_store_init() called in main.c");
+    record_count = flash_store_load_all(device_records, FLASH_MAX_RECORDS); // 加载到内存数组（最多25条）
+
+#endif
+    /* 创建FreeRTOS同步对象 */
+    xCommandQueue  = xQueueCreate(3, sizeof(Command_t));
+    xResponseQueue = xQueueCreate(3, sizeof(Response_t));
+    xUSBMutex      = xSemaphoreCreateMutex();
+    xI2CMutex      = xSemaphoreCreateMutex();
+
+    if (xCommandQueue == NULL || xResponseQueue == NULL || xUSBMutex == NULL || xI2CMutex == NULL) {
+        LOGE("Failed to create FreeRTOS objects");
+        while (1);
+    }
+
+    /* 创建任务 - 优化后的配置 */
+    xTaskCreate(I2C_Task, "I2C", 2 * 1024, NULL, 3, &xI2CTaskHandle);
+    xTaskCreate(USB_Task, "USB", 4 * 1024, NULL, 2, &xUSBTaskHandle);
+    xTaskCreate(Ctrl_Task, "Ctrl", 1024, NULL, 1, &xCtrlTaskHandle);
+    xTaskCreate(Watchdog_Feed_Task, "WDT_Keeper", 256, NULL, 4, NULL);
+    // xTaskCreate(Test_task, "test", 256, NULL, 2, NULL);
+    LOGI("FreeRTOS tasks created, starting scheduler...");
+    vTaskStartScheduler();
+
+    /* 不应执行到这里 */
+    LOGE("Scheduler failed to start");
+    while (1);
+}
+
+void measureTaskTiming(void)
+{
+    static uint32_t measurement_count   = 0;
+    static TickType_t last_measure_time = 0;
+    static float avg_execution_time     = 0;
+    static float avg_cycle_time         = 0;
+
+    TickType_t current_time = xTaskGetTickCount();
+
+    if (last_measure_time > 0) {
+        TickType_t cycle_time = current_time - last_measure_time;
+        avg_cycle_time        = avg_cycle_time * 0.9 + pdTICKS_TO_MS(cycle_time) * 0.1;
+
+        measurement_count++;
+        if (measurement_count % 50 == 0) {
+            LOGI("Ctrl_Task timing stats: Avg cycle=%.1fms, Target=500ms", avg_cycle_time);
+        }
+    }
+    last_measure_time = current_time;
+}
+/* 控制任务 */
+static void Ctrl_Task(void *pvParameters)
+{
+    TickType_t xLastWakeTime    = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(500);
+
+    LOGI("Control Task Started");
+    static uint8_t skip_sn_read_counter = 0;
+    static uint32_t run_count           = 0;
+
+    for (;;) {
+        run_count++;
+        // test_delay();
+        // measureTaskTiming();
+        /* 监控缓冲区使用 */
+        // if (run_count > 10 ) {
+        //     monitor_buffer_usage();
+        //     run_count = 0;
+        // }
+
+        /* 定期检查I2C设备连接 */
+        if (timecunt > WATCHCOUNT + D3s) {
+            WATCHDOGFLAG = 0;
+
+            /* 左耳连接检查 */
+            if ((timecunt > PflagCout1 + D3s)) {
+                // LOGI("===xSemaphoreTake(xI2CMutex)4====");
+                if (run_count % 30 == 0) {
+
+                    if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                        i2c_check_and_connect(&hi2c1, I2C1_PORT, &ConnI2c1_flag, I2c1_SN, I2c1_MODEL);
+                        xSemaphoreGive(xI2CMutex);
+                        // LOGI("Left ear connection check completed");
+                    }
+                }
+                // LOGI("===xSemaphoreGive(xI2CMutex)4====");
+                // LOG("");
+            } else {
+                I2c1ConfigGpioIn();
+            }
+
+            /* 右耳连接检查 */
+            if ((timecunt > PflagCout2 + D3s)) {
+                // LOGI("===xSemaphoreTake(xI2CMutex)5====");
+                if (run_count % 30 == 0) {
+
+                    if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                        i2c_check_and_connect(&hi2c2, I2C2_PORT, &ConnI2c2_flag, I2c2_SN, I2c2_MODEL);
+                        xSemaphoreGive(xI2CMutex);
+                        // LOGI("Right ear connection check completed");
+                    }
+                }
+                //  LOG("");
+            } else {
+                I2c2ConfigGpioIn();
+            }
+            //
+
+        } else {
+            static uint8_t gpio_init_done = 0;
+            if (!gpio_init_done) {
+                I2c1ConfigGpioIn();
+                I2c2ConfigGpioIn();
+                gpio_init_done = 1;
+            }
+        }
+
+        /* 更新LCD显示 */
+        if (run_count < 300) {
+            Lcd_Pag_Index = LCD_Page_Logo;
+        } else {
+
+            Lcd_Pag_Index = LCD_Page_Connect;
+        }
+
+        // 在循环中添加
+        if (skip_sn_read_counter == 0) {
+            skip_sn_read_counter = 20;
+            Get_eeprom_SN();
+        } else {
+            skip_sn_read_counter--;
+        }
+        LCD_DISPLAY();
+
+        /* 固定周期延时 */
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
+
+/* 中断服务程序 */
+void USBFS_L_CAN1_RX0_IRQHandler(void)
+{
+    usbd_irq_handler(&usb_core_dev);
+}
+
+void Get_eeprom_SN(void)
+{
+    static uint8_t last_ConnI2c1_flag = 0, last_ConnI2c2_flag = 0;
+    static uint8_t last_I2c1_SN[SN_SIZE] = {0};
+    static uint8_t last_I2c2_SN[SN_SIZE] = {0};
+    static uint8_t skip_sn_read_1        = 0;
+    static uint8_t skip_sn_read_2        = 0;
+    uint8_t i                            = 0;
+    static uint64_t test_count           = 0;
+    uint8_t conn_changed                 = 0;
+    uint8_t sn1_changed                  = 0;
+    uint8_t sn2_changed                  = 0;
+
+    // LOGI("%d=======coni2c1:%d=======coni2c2:%d=======skip_sn_read_1:%d=======skip_sn_read_2:%d=======last1:%d=======last2:%d",
+    //       test_count,ConnI2c1_flag,ConnI2c2_flag,skip_sn_read_1,skip_sn_read_2,last_ConnI2c1_flag,last_ConnI2c2_flag);
+    // LOG("");
+
+    // 检查连接状态变化
+    uint8_t need_read_1 = 0; // 标记是否需要读取左耳
+    uint8_t need_read_2 = 0; // 标记是否需要读取右耳
+
+    if (last_ConnI2c1_flag != ConnI2c1_flag) {
+        conn_changed = 1;
+        if (ConnI2c1_flag) {
+            LOGI("Left ear connected");
+            skip_sn_read_1 = 6;
+            need_read_1    = 1; // 需要读取左耳
+        } else {
+            LOGI("Left ear disconnected");
+            for (i = 0; i < SN_LEN; i++) {
+                EEPROM_Status.EEPROM_SN[0][i]        = 0;
+                EEPROM_Status.EEPROM_SN_LCD[0][i]    = 0;
+                last_I2c1_SN[i]                      = 0; // 清除缓存的SN
+                EEPROM_Status.EEPROM_MODLE_LCD[0][i] = 0; // 清除缓存的物料号
+            }
+            need_read_1 = 1; // 左耳断开也需要触发读取流程
+        }
+        last_ConnI2c1_flag = ConnI2c1_flag;
+
+        // 左耳状态变化，无论右耳是否连接，都尝试读取右耳
+        if (ConnI2c2_flag) {
+            need_read_2    = 1;
+            skip_sn_read_2 = 6; // 重置右耳跳过计数器
+        }
+    }
+
+    if (last_ConnI2c2_flag != ConnI2c2_flag) {
+        conn_changed = 1;
+        if (ConnI2c2_flag) {
+            LOGI("Right ear connected");
+            skip_sn_read_2 = 6;
+            need_read_2    = 1; // 需要读取右耳
+        } else {
+            LOGI("Right ear disconnected");
+            for (i = 0; i < SN_LEN; i++) {
+                EEPROM_Status.EEPROM_SN[1][i]        = 0;
+                EEPROM_Status.EEPROM_SN_LCD[1][i]    = 0;
+                last_I2c2_SN[i]                      = 0; // 清除缓存的SN
+                EEPROM_Status.EEPROM_MODLE_LCD[1][i] = 0; // 清除缓存的物料号
+            }
+            need_read_2 = 1; // 右耳断开也需要触发读取流程
+        }
+        last_ConnI2c2_flag = ConnI2c2_flag;
+
+        // 右耳状态变化，无论左耳是否连接，都尝试读取左耳
+        if (ConnI2c1_flag) {
+            need_read_1    = 1;
+            skip_sn_read_1 = 6; // 重置左耳跳过计数器
+        }
+    }
+
+    // LOG("%d=======coni2c1:%d=======coni2c2:%d=======skip_sn_read_1:%d=======skip_sn_read_2:%d=======last1:%d=======last2:%d",
+    //     test_count,ConnI2c1_flag,ConnI2c2_flag,skip_sn_read_1,skip_sn_read_2,last_ConnI2c1_flag,last_ConnI2c2_flag);
+    // LOG("");
+    // test_count++;
+
+    // 只在连接状态变化时（新连接）或跳过计数器不为0时执行读取操作
+    // 修改条件：只要need_read_1或need_read_2为1，就执行读取
+
+#if !FACTORY_VERSION
+    if (need_read_1 || need_read_2 || skip_sn_read_1 != 0 || skip_sn_read_2 != 0)
+#endif
+    {
+/*********************** 通用设备处理 ***********************/
+        // 左耳配置
+        ear_config_t left_ear_cfg = {
+            .ear_index  = 0,
+            .ear_name   = "Left",
+            .hi2c       = &hi2c1,
+            .conn_flag  = &ConnI2c1_flag,
+            .sn_buf     = I2c1_SN,
+            .model_buf  = I2c1_MODEL,
+            .last_sn    = last_I2c1_SN,
+            .skip_counter = &skip_sn_read_1,
+            .need_read  = need_read_1,
+        };
+        // 右耳配置
+        ear_config_t right_ear_cfg = {
+            .ear_index  = 1,
+            .ear_name   = "Right",
+            .hi2c       = &hi2c2,
+            .conn_flag  = &ConnI2c2_flag,
+            .sn_buf     = I2c2_SN,
+            .model_buf  = I2c2_MODEL,
+            .last_sn    = last_I2c2_SN,
+            .skip_counter = &skip_sn_read_2,
+            .need_read  = need_read_2,
+        };
+        uint8_t current_sn[SN_LEN]       = {0};
+        uint8_t current_model[MODEL_LEN] = {0};
+
+        // 左耳处理
+#if !FACTORY_VERSION
+        if (ConnI2c1_flag == 1 && (skip_sn_read_1 != 0 || need_read_1))
+#else
+        if (ConnI2c1_flag == 1)
+#endif
+        {
+            if (skip_sn_read_1 > 1) {
+                skip_sn_read_1--;
+            } else {
+#if FACTORY_VERSION
+                process_ear_device_factory(&left_ear_cfg, current_sn, current_model, &skip_sn_read_1);
+#else
+                process_ear_device(&left_ear_cfg, current_sn, current_model, &skip_sn_read_1, need_read_1);
+#endif
+            }
+        }
+
+        // 右耳处理
+#if !FACTORY_VERSION
+        if (ConnI2c2_flag == 1 && (skip_sn_read_2 != 0 || need_read_2))
+#else
+        if (ConnI2c2_flag == 1)
+#endif
+        {
+            if (skip_sn_read_2 > 1) {
+                skip_sn_read_2--;
+            } else {
+#if FACTORY_VERSION
+                process_ear_device_factory(&right_ear_cfg, current_sn, current_model, &skip_sn_read_2);
+#else
+                process_ear_device(&right_ear_cfg, current_sn, current_model, &skip_sn_read_2, need_read_2);
+#endif
+            }
+        }
+    }
+}
+/* FreeRTOS 内存分配失败钩子函数 */
+void vApplicationMallocFailedHook(void)
+{
+    /* 内存分配失败，禁用中断并进入死循环 */
+    taskDISABLE_INTERRUPTS();
+    LOGE("Memory allocation failed!");
+    while (1) {
+    }
+}
+
+/* FreeRTOS 堆栈溢出钩子函数 */
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+    LOGE("StackOverflow in %s", pcTaskName);
+    for (;;);
+}
+
+/**
+ * @brief  USB延时函数
+ */
+void usb_delay_ms(uint32_t ms)
+{
+    delay_ms(ms);
+}
+
+void usb_delay_us(uint32_t us)
+{
+    delay_us(us);
+}
+
+/* 监控缓冲区使用情况 */
+void monitor_buffer_usage(void)
+{
+    static uint32_t max_framecout     = 0;
+    static uint32_t max_rx_buf1_used  = 0;
+    static uint64_t last_buffer_check = 0;
+
+    if (timecunt - last_buffer_check > BUFFER_MONITOR_INTERVAL) {
+        last_buffer_check      = timecunt;
+        uint32_t current_usage = framecout * 64;
+
+        if (current_usage > max_rx_buf1_used) {
+            max_rx_buf1_used = current_usage;
+            LOG("Max rx_buf1 usage: %u bytes (%.1f%%)",
+                max_rx_buf1_used, (max_rx_buf1_used * 100.0) / E32K_SIZE);
+        }
+
+        if (current_usage > E32K_SIZE - 100) {
+            LOGW("Warning: rx_buf1 buffer almost full! %u/%u bytes used",
+                 current_usage, E32K_SIZE);
+        }
+    }
+}
+
+
+
+/**
+ * @brief 更新EEPROM状态到全局变量
+ * @param ear_index 0=左耳, 1=右耳
+ * @param sn_buf SN数据
+ * @param model_buf 物料号数据
+ */
+static void update_eeprom_status(uint8_t ear_index, uint8_t *sn_buf, uint8_t *model_buf)
+{
+    uint8_t i;
+    for (i = 0; i < SN_LEN; i++) {
+        EEPROM_Status.EEPROM_SN[ear_index][i] = sn_buf[i];
+    }
+    for (i = 0; i < SN_LEN; i++) {
+        EEPROM_Status.EEPROM_SN_LCD[ear_index][i] = (i > 6) ? EEPROM_Status.EEPROM_SN[ear_index][i + 1] : EEPROM_Status.EEPROM_SN[ear_index][i];
+    }
+    for (i = 0; i < MODEL_LEN; i++) {
+        EEPROM_Status.EEPROM_MODLE_LCD[ear_index][i] = model_buf[i];
+    }
+}
+
+/**
+ * @brief 非工厂版本 - 处理单个耳朵设备(左/右耳通用)
+ * @return 1=成功, 0=失败
+ */
+static uint8_t process_ear_device(const ear_config_t *cfg,
+                                   uint8_t *current_sn,
+                                   uint8_t *current_model,
+                                   uint8_t *skip_counter,
+                                   uint8_t need_read)
+{
+    uint8_t read_success = 0;
+    uint8_t i;
+
+    if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        *skip_counter = 4;
+        LOGW("%s ear: failed to take I2C mutex", cfg->ear_name);
+        return 0;
+    }
+
+    // 1. 读取SN
+    read_success = i2c_read_with_retry(cfg->hi2c, SN_ADDR, current_sn, SN_LEN, 3);
+
+    if (read_success) {
+        // 2. 读取物料号
+        read_success = i2c_read_with_retry(cfg->hi2c, MODEL_ADDR, current_model, MODEL_LEN, 2);
+
+        if (read_success) {
+            // 3. 检查物料号是否有效
+            uint8_t model_valid = is_model_valid(current_model, current_sn);
+
+            if (!model_valid) {
+                LOGW("%s ear model number is invalid!", cfg->ear_name);
+
+                // 4. 在记录表中查找此SN
+                int record_idx = find_record_by_sn(current_sn);
+                if (record_idx < 0) {
+                    LOGI("Record not in memory, reloading from Flash...");
+                    uint8_t loaded = flash_store_load_all(device_records, FLASH_MAX_RECORDS);
+                    if (loaded > 0) {
+                        record_count = loaded;
+                        record_current = (loaded < FLASH_MAX_RECORDS) ? loaded : 0;
+                        LOGI("Reloaded %d records from Flash, record_current=%d", loaded, record_current);
+                        record_idx = find_record_by_sn(current_sn);
+                    }
+                }
+
+                if (record_idx >= 0 && device_records[record_idx].model_valid) {
+                    // 找到有效记录，恢复物料号
+                    LOGI("Found valid model in record, attempting recovery...");
+                    LOG("sn: %02X%02X%02X%02X%02X%02X%02X%02X",
+                        current_sn[0], current_sn[1], current_sn[2], current_sn[3],
+                        current_sn[4], current_sn[5], current_sn[6], current_sn[7]);
+                    LOG("recorded model: %02X%02X%02X%02X%02X",
+                        device_records[record_idx].model[0], device_records[record_idx].model[1],
+                        device_records[record_idx].model[2], device_records[record_idx].model[3],
+                        device_records[record_idx].model[4]);
+
+                    uint8_t write_success = i2c_write_with_retry(cfg->hi2c, MODEL_ADDR,
+                                                                 device_records[record_idx].model,
+                                                                 MODEL_LEN, 3);
+                    if (write_success) {
+                        LOGI("%s ear model number recovered successfully", cfg->ear_name);
+                    } else {
+                        LOGE("Failed to write model number!");
+                    }
+                } else {
+                    // 没有记录，从备份恢复
+                    LOGE("%d=================No valid model record found for this SN", record_idx);
+                    uint8_t current_backup_model[MODEL_BACK_LEN] = {0};
+
+                    read_success = i2c_read_with_retry(cfg->hi2c, MODEL_BACK_ADDR, current_backup_model, MODEL_BACK_LEN, 3);
+                    if (read_success) {
+                        LOGI("Read backup model number successfully");
+                        LOG("backup model: %02X%02X%02X",
+                            current_backup_model[0], current_backup_model[1], current_backup_model[2]);
+
+                        uint8_t new_model[MODEL_LEN] = {0};
+                        new_model[0] = 0x11;
+                        new_model[1] = current_backup_model[0];
+                        new_model[2] = current_backup_model[1];
+                        new_model[3] = current_backup_model[2];
+                        new_model[4] = 0x02;
+
+                        LOG("New model to write: %02X%02X%02X%02X%02X",
+                            new_model[0], new_model[1], new_model[2], new_model[3], new_model[4]);
+
+                        if (new_model[2] == 0 && new_model[3] == 0) {
+                            LOGE("Read New model is all 0x00 ERR");
+                        } else {
+                            uint8_t write_success = i2c_write_with_retry(cfg->hi2c, MODEL_ADDR,
+                                                                         new_model, MODEL_LEN, 3);
+                            if (write_success) {
+                                LOGI("%s ear model number recovered from backup successfully", cfg->ear_name);
+                                int idx = find_record_by_sn(current_sn);
+                                if (idx < 0) {
+                                    idx = add_or_update_record(current_sn, new_model);
+                                    if (idx >= 0) {
+                                        if (flash_store_save_record(&device_records[idx])) {
+                                            LOGI("Record saved to Flash");
+                                        } else {
+                                            LOGE("Failed to save record to Flash!");
+                                        }
+                                    }
+                                }
+                            } else {
+                                LOGE("Failed to write backup model number!");
+                            }
+                        }
+                    } else {
+                        LOGE("Failed to read backup model number!");
+                    }
+                }
+            } else {
+                // 物料号有效，检查是否需要记录
+                int record_idx = find_record_by_sn(current_sn);
+                if (record_idx < 0) {
+                    // 新设备，记录SN和物料号
+                    LOGI("New %s ear device, recording SN and model", cfg->ear_name);
+                    int idx = add_or_update_record(current_sn, current_model);
+                    if (idx >= 0) {
+                        if (flash_store_save_record(&device_records[idx])) {
+                            LOGI("Record saved to Flash");
+                        } else {
+                            LOGE("Failed to save record to Flash!");
+                        }
+                    }
+                    LOG("sn: %02X%02X%02X%02X%02X%02X%02X%02X",
+                        current_sn[0], current_sn[1], current_sn[2], current_sn[3],
+                        current_sn[4], current_sn[5], current_sn[6], current_sn[7]);
+                    LOG("model: %02X%02X%02X%02X%02X",
+                        current_model[0], current_model[1], current_model[2],
+                        current_model[3], current_model[4]);
+                } else if (!device_records[record_idx].model_valid) {
+                    // 已有记录但物料号无效，更新物料号
+                    LOGI("Updating model number for existing SN");
+                    int idx = add_or_update_record(current_sn, current_model);
+                    if (idx >= 0) {
+                        if (flash_store_save_record(&device_records[idx])) {
+                            LOGI("Record saved to Flash");
+                        } else {
+                            LOGE("Failed to save record to Flash!");
+                        }
+                    }
+                }
+            }
+            *skip_counter = 0;
+        }
+    }
+
+    xSemaphoreGive(xI2CMutex);
+
+    if (!read_success) {
+        *skip_counter = 4;
+        LOGW("Failed to read %s ear SN/Model, will retry later", cfg->ear_name);
+        return 0;
+    }
+
+    // 更新全局变量
+    for (i = 0; i < SN_SIZE; i++) {
+        cfg->last_sn[i] = current_sn[i];
+        cfg->sn_buf[i]  = current_sn[i];
+    }
+    update_eeprom_status(cfg->ear_index, cfg->sn_buf, current_model);
+
+    return 1;
+}
+
+#if FACTORY_VERSION
+/**
+ * @brief 工厂版本 - 处理单个耳朵设备(简化逻辑，不保存记录)
+ */
+static uint8_t process_ear_device_factory(const ear_config_t *cfg,
+                                            uint8_t *current_sn,
+                                            uint8_t *current_model,
+                                            uint8_t *skip_counter)
+{
+    uint8_t read_success = 0;
+    uint8_t need_write_back = 0;
+    uint8_t new_model[MODEL_LEN] = {0};
+    uint8_t i;
+
+    if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        *skip_counter = 4;
+        LOGW("Factory Mode: %s ear failed to take mutex", cfg->ear_name);
+        return 0;
+    }
+
+    // 1. 读取主物料号
+    read_success = i2c_read_with_retry(cfg->hi2c, MODEL_ADDR, current_model, MODEL_LEN, 2);
+
+    if (read_success) {
+        // 2. 检查物料号有效性
+        if (current_model[1] == 0 && current_model[2] == 0 && current_model[3] == 0) {
+            read_success = i2c_read_with_retry(cfg->hi2c, TYPE_ADDR, cfg->model_buf, TYPE_SIZE, 2);
+        }
+
+        uint8_t model_valid = is_model_valid(current_model, NULL);
+        if (!model_valid) {
+            LOGW("Factory Mode: %s ear model is invalid! Attempting recovery...", cfg->ear_name);
+            need_write_back = 1;
+
+            // 3. 读取备份物料号
+            uint8_t current_backup_model[MODEL_BACK_LEN] = {0};
+            read_success = i2c_read_with_retry(cfg->hi2c, MODEL_BACK_ADDR, current_backup_model, MODEL_BACK_LEN, 3);
+
+            if (read_success) {
+                LOGI("Factory Mode: Backup model read OK.");
+                LOG("Factory Mode: Backup model: %02X%02X%02X",
+                    current_backup_model[0], current_backup_model[1], current_backup_model[2]);
+
+                // 4. 组合成标准格式
+                new_model[0] = 0x11;
+                new_model[1] = current_backup_model[0];
+                new_model[2] = current_backup_model[1];
+                new_model[3] = current_backup_model[2];
+                new_model[4] = 0x02;
+            } else {
+                LOGE("Factory Mode: Failed to read backup model!");
+                need_write_back = 0;
+            }
+        }
+    } else {
+        LOGW("Factory Mode: Failed to read %s ear main model!", cfg->ear_name);
+    }
+
+    // 5. 如果需要恢复，执行写回
+    if (need_write_back && read_success) {
+        uint8_t write_success = i2c_write_with_retry(cfg->hi2c, MODEL_ADDR, new_model, MODEL_LEN, 3);
+        if (write_success) {
+            LOGI("Factory Mode: %s ear model recovered successfully.", cfg->ear_name);
+            memcpy(current_model, new_model, MODEL_LEN);
+        } else {
+            LOGE("Factory Mode: Failed to write recovered model!");
+        }
+    }
+
+    // 6. 读取SN(仅用于显示)
+    if (read_success) {
+        i2c_read_with_retry(cfg->hi2c, SN_ADDR, current_sn, SN_LEN, 2);
+    }
+
+    xSemaphoreGive(xI2CMutex);
+
+    if (!read_success) {
+        *skip_counter = 4;
+        LOGW("Factory Mode: Failed %s ear process, will retry.", cfg->ear_name);
+        return 0;
+    }
+
+    // 更新全局变量
+    for (i = 0; i < SN_SIZE; i++) {
+        cfg->last_sn[i] = current_sn[i];
+        cfg->sn_buf[i]  = current_sn[i];
+    }
+    update_eeprom_status(cfg->ear_index, cfg->sn_buf, current_model);
+    *skip_counter = 0;
+
+    return 1;
+}
+#endif /* FACTORY_VERSION */
