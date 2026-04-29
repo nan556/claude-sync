@@ -18,12 +18,93 @@ HOLIDAY_CACHE_FILE = TOOL_PATH / "holiday_cache.json"
 
 
 def show_windows_notification(title, message):
-    """Show Windows desktop notification via PowerShell MessageBox"""
+    """Show Windows desktop notification via PowerShell with topmost window"""
     # Escape single quotes in message
+    title_escaped = title.replace("'", "''")
     message_escaped = message.replace("'", "''")
     script = f"""
     Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show('{message_escaped}', '{title}', 'OK', 'Information')
+    Add-Type -AssemblyName System.Drawing
+    # Create rounded border path
+    function Get-RoundedRect {{ param($rect, $radius)
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $path.AddArc($rect.X, $rect.Y, $radius, $radius, 180, 90)
+        $path.AddArc($rect.X + $rect.Width - $radius, $rect.Y, $radius, $radius, 270, 90)
+        $path.AddArc($rect.X + $rect.Width - $radius, $rect.Y + $rect.Height - $radius, $radius, $radius, 0, 90)
+        $path.AddArc($rect.X, $rect.Y + $rect.Height - $radius, $radius, $radius, 90, 90)
+        $path.CloseFigure()
+        return $path
+    }}
+    # Main form
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = '{title_escaped}'
+    $form.Width = 340
+    $form.Height = 160
+    $form.StartPosition = 'CenterScreen'
+    $form.TopMost = $true
+    $form.FormBorderStyle = 'None'
+    $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+    # Draw rounded border
+    $form.Paint += {{
+        $e = $_.Graphics
+        $e.SmoothingMode = 'AntiAlias'
+        $rect = New-Object System.Drawing.Rectangle(0, 0, $form.Width - 1, $form.Height - 1)
+        $path = Get-RoundedRect -rect $rect -radius 16
+        $e.DrawPath([System.Drawing.Pens]::FromArgb(80, 80, 80), $path)
+    }}
+    # Icon circle with "!" - use Label control
+    $iconBg = New-Object System.Windows.Forms.Panel
+    $iconBg.Location = New-Object System.Drawing.Point(25, 35)
+    $iconBg.Size = New-Object System.Drawing.Size(44, 44)
+    $iconBg.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+    $form.Controls.Add($iconBg)
+    # "!" text on the icon
+    $iconLabel = New-Object System.Windows.Forms.Label
+    $iconLabel.Dock = 'Fill'
+    $iconLabel.Text = '!'
+    $iconLabel.Font = New-Object System.Drawing.Font('Arial', 24, [System.Drawing.FontStyle]::Bold)
+    $iconLabel.ForeColor = [System.Drawing.Color]::White
+    $iconLabel.TextAlign = 'MiddleCenter'
+    $iconBg.Controls.Add($iconLabel)
+    # Title
+    $titleLabel = New-Object System.Windows.Forms.Label
+    $titleLabel.Location = New-Object System.Drawing.Point(80, 30)
+    $titleLabel.Size = New-Object System.Drawing.Size(200, 25)
+    $titleLabel.Text = '{title_escaped}'
+    $titleLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 13, [System.Drawing.FontStyle]::Bold)
+    $titleLabel.ForeColor = [System.Drawing.Color]::White
+    $form.Controls.Add($titleLabel)
+    # Message
+    $msgLabel = New-Object System.Windows.Forms.Label
+    $msgLabel.Location = New-Object System.Drawing.Point(80, 55)
+    $msgLabel.Size = New-Object System.Drawing.Size(230, 50)
+    $msgLabel.Text = '{message_escaped}'
+    $msgLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10)
+    $msgLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 180)
+    $msgLabel.Padding = New-Object System.Windows.Forms.Padding(0, 5, 0, 0)
+    $form.Controls.Add($msgLabel)
+    # OK Button
+    $okButton = New-Object System.Windows.Forms.Button
+    $okButton.Location = New-Object System.Drawing.Point(220, 115)
+    $okButton.Size = New-Object System.Drawing.Size(95, 32)
+    $okButton.Text = '确定'
+    $okButton.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10)
+    $okButton.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+    $okButton.ForeColor = [System.Drawing.Color]::White
+    $okButton.FlatStyle = 'Flat'
+    $okButton.FlatAppearance.BorderSize = 0
+    $okButton.Cursor = 'Hand'
+    $okButton.Paint += {{
+        $e = $_.Graphics
+        $e.SmoothingMode = 'AntiAlias'
+        $rect = New-Object System.Drawing.Rectangle(0, 0, $okButton.Width - 1, $okButton.Height - 1)
+        $path = Get-RoundedRect -rect $rect -radius 6
+        $e.FillPath([System.Drawing.SolidBrush]::FromArgb(0, 120, 215), $path)
+    }}
+    $okButton.DialogResult = 'OK'
+    $form.Controls.Add($okButton)
+    $form.AcceptButton = $okButton
+    [void]$form.ShowDialog()
     """
     try:
         subprocess.run(
@@ -132,16 +213,25 @@ def check_and_fire_reminders():
     """Check pending reminders and fire any that are due"""
     reminders = load_reminders()
     current_time = datetime.now().strftime("%H:%M")
+    current_minute = datetime.now().strftime("%Y-%m-%d %H:%M")  # Track exact minute
     current_weekday = datetime.now().weekday() + 1  # 1=Mon, 7=Sun
     fired = False
 
     remaining = []
+
+    # Track if we've already fired in this minute (prevents duplicate popups)
+    fired_this_minute = set()
 
     for reminder in reminders:
         if reminder["status"] != "pending":
             continue
 
         if reminder["time"] != current_time:
+            remaining.append(reminder)
+            continue
+
+        # Skip if already fired this minute (prevents duplicate popup from multiple monitors)
+        if reminder["id"] in fired_this_minute:
             remaining.append(reminder)
             continue
 
@@ -164,8 +254,9 @@ def check_and_fire_reminders():
             should_fire = get_tomorrow_is_holiday()
 
         if should_fire:
-            show_windows_notification("Reminder", reminder["message"])
+            show_windows_notification("提醒", reminder["message"])
             fired = True
+            fired_this_minute.add(reminder["id"])
             # once类型删除，其他保持
             if reminder_type != "once":
                 remaining.append(reminder)
@@ -184,20 +275,20 @@ def ensure_monitor_running():
     if BACKGROUND_PID_FILE.exists():
         try:
             with open(BACKGROUND_PID_FILE, "r") as f:
-                pid = int(f.read().strip())
-            # Check if process exists
-            os.kill(pid, 0)
-            return  # Already running
+                pid_str = f.read().strip()
+            if pid_str and pid_str != "placeholder":
+                pid = int(pid_str)
+                # Check if process exists
+                os.kill(pid, 0)
+                return  # Already running
         except (ValueError, FileNotFoundError, ProcessLookupError):
             pass  # Not running, need to start
 
     # Start background monitor
     monitor_script = TOOL_PATH / "monitor.sh"
-    with open(BACKGROUND_PID_FILE, "w") as f:
-        f.write("placeholder")
 
-    # Use nohup and redirect output
-    subprocess.Popen(
+    # Use nohup and redirect output, get actual PID
+    proc = subprocess.Popen(
         ["bash", str(monitor_script)],
         cwd=str(TOOL_PATH),
         stdout=open("/dev/null", "w"),
@@ -205,9 +296,9 @@ def ensure_monitor_running():
         start_new_session=True
     )
 
-    # Save actual PID
+    # Save actual PID of the bash process (not the Python subprocess)
     with open(BACKGROUND_PID_FILE, "w") as f:
-        f.write(str(os.getpid()))
+        f.write(str(proc.pid))
 
 
 def cleanup():
