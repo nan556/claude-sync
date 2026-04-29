@@ -1,0 +1,105 @@
+{
+  "profile": {
+    "name": "nan",
+    "age": 25,
+    "height_cm": 172,
+    "weight_kg": 83,
+    "resting_hr": 60,
+    "max_hr": 195,
+    "heart_rate_reserve": 135,
+    "created": "2026-04-29"
+  },
+  "training_zones": {
+    "Z1": {"name": "轻松跑", "min_hr": 127, "max_hr": 141, "intensity": "50-60%"},
+    "Z2": {"name": "有氧耐力", "min_hr": 141, "max_hr": 155, "intensity": "60-70%"},
+    "Z3": {"name": "乳酸阈值", "min_hr": 155, "max_hr": 168, "intensity": "70-80%"},
+    "Z4": {"name": "无氧耐力", "min_hr": 168, "max_hr": 182, "intensity": "80-90%"},
+    "Z5": {"name": "最大强度", "min_hr": 182, "max_hr": 195, "intensity": "90-100%"}
+  },
+  "trainings": [
+    {
+      "date": "2026-04-21",
+      "distance_km": 3.2,
+      "duration_min": 21,
+      "avg_pace_min_per_km": 6.56,
+      "avg_hr": 165,
+      "max_hr": 178,
+      "splits": {
+        "1km": "6:30",
+        "2km": "6:55",
+        "3km": "7:10"
+      },
+      "feeling": 4,
+      "notes": "正常训练，不看心率，3公里20分钟出头",
+      "training_type": "normal"
+    },
+    {
+      "date": "2026-04-22",
+      "distance_km": 4.0,
+      "duration_min": 30,
+      "avg_pace_min_per_km": 7.5,
+      "avg_hr": 167,
+      "max_hr": 176,
+      "splits": {
+        "1km": "7:26 HR162",
+        "2km": "7:20 HR165",
+        "3km": "7:23 HR167",
+        "4km": "7:34 HR170-171"
+      },
+      "recovery": {
+        "1min": 150,
+        "2min": 140,
+        "4min": 133
+      },
+      "feeling": 3,
+      "notes": "配速稳定7:20-7:34，心率从162升至171，间歇冲刺到175-176",
+      "training_type": "hr_control"
+    },
+    {
+      "date": "2026-04-27",
+      "distance_km": 4.6,
+      "duration_min": 40,
+      "avg_pace_min_per_km": 8.7,
+      "avg_hr": 156,
+      "max_hr": 174,
+      "splits": {
+        "1km": "7:54 HR156-157",
+        "2km": "8:36 HR156-157",
+        "3km": "8:48 HR157-160",
+        "4km": "9:12 HR160",
+        "extra": "几百米加速 HR174"
+      },
+      "feeling": 4,
+      "notes": "以控心率为主，配速放慢，全程HR稳定在156-160，最后几百米冲刺到174",
+      "training_type": "hr_control"
+    },
+    {
+      "date": "2026-04-28",
+      "distance_km": 2.8,
+      "duration_min": 20,
+      "avg_pace_min_per_km": 7.14,
+      "avg_hr": 161,
+      "max_hr": 163,
+      "splits": {
+        "1km": "6:55 HR160",
+        "2km": "7:02 HR162",
+        "3km_intervals": "跑400m~3min HR163 → 走3min HR120 → 跑400m HR162 → 走半圈"
+      },
+      "intervals": {
+        "run_duration_sec": 180,
+        "run_pace": "6:10-6:30",
+        "run_hr": 163,
+        "walk_duration_sec": 180,
+        "walk_hr_recovery": 120
+      },
+      "feeling": 2,
+      "notes": "感觉累，跑了2公里后临时改成间歇模式。走3分钟心率能从163降到120，恢复很快",
+      "training_type": "interval"
+    }
+  ],
+  "weekly_goals": {
+    "distance_km": 15,
+    "z2_ratio_target": 60,
+    "notes": "减肥阶段，重点在时长而非配速"
+  }
+}

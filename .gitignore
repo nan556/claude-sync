@@ -38,5 +38,7 @@ config/
 projects/**/*.jsonl
 projects/**/*/
 !projects/**/memory/
+!projects/-mnt-d-assistant/data/
 !projects/**/memory/**
+!projects/-mnt-d-assistant/data/
 !projects/**/sessions-index.json
