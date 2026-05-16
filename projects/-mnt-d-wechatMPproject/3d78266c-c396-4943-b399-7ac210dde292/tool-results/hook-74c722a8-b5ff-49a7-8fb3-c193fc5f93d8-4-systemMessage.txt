@@ -1,0 +1,200 @@
+[1m[36m[wechatMPproject] recent context, 2026-05-16 9:53am GMT+8[0m
+[90m────────────────────────────────────────────────────────────[0m
+
+[2mLegend: session-request | 🔴 bugfix | 🟣 feature | 🔄 refactor | ✅ change | 🔵 discovery | ⚖️ decision[0m
+
+[1mColumn Key[0m
+[2m  Read: Tokens to read this observation (cost to learn it now)[0m
+[2m  Work: Tokens spent on work that produced this record ( research, building, deciding)[0m
+
+[2mContext Index: This semantic index (titles, types, files, tokens) is usually sufficient to understand past work.[0m
+
+[2mWhen you need implementation details, rationale, or debugging context:[0m
+[2m  - Fetch by ID: get_observations([IDs]) for observations visible in this index[0m
+[2m  - Search history: Use the mem-search skill for past decisions, bugs, and deeper research[0m
+[2m  - Trust this index over re-reading code for past decisions and learnings[0m
+
+[1m[36mContext Economics[0m
+[2m  Loading: 100 observations (21,722 tokens to read)[0m
+[2m  Work investment: 910,480 tokens spent on research, building, and decisions[0m
+[32m  Your savings: 98% reduction from reuse[0m
+
+[1m[36mApr 23, 2026[0m
+
+[33m#S4[0m Debugging Bluetooth connection failure for Heacad TWS earbuds device (Apr 23, 11:17 AM)
+
+
+[1m[36mMay 15, 2026[0m
+
+[2mHeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3274[0m  [2m10:49 AM[0m  ✅  Git history reset to commit 765c8b4  
+[2mHeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3275[0m  [2m10:51 AM[0m  🔵  HeafitMP-server has uncommitted local changes and 1 unpushed commit  
+[2mGeneral[0m
+  [2m#3276[0m            🔵  HeafitMP-server dual-ear device table refactoring  
+  [2m#3277[0m            🔵  HeafitMP dual-ear detection feature implementation  
+[2mHeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3278[0m            🔵  HeafitMP has unrecoverable local commits from previous session  
+[2mGeneral[0m
+  [2m#3279[0m            ⚖️  Session requires commit recovery or reimplementation  
+  [2m#3280[0m  [2m10:52 AM[0m  🔵  HeafitMP-server also has unrecovered dual-ear commits  
+  [2m#3281[0m            🔵  Both repos have dangling commits from session resets  
+  [2m#3282[0m  [2m10:53 AM[0m  ⚖️  Workspace-first workflow: postpone commits for review  
+  [2m#3283[0m  [2m10:55 AM[0m  🔵  Workspace is clean after git reset --hard  
+  [2m#3284[0m  [2m10:58 AM[0m  🔵  双耳会话任务被意外删除  
+  [2m#3285[0m  [2m10:59 AM[0m  🔵  Project has Vue frontend and backend components with active development  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSession.java[0m
+  [2m#3286[0m  [2m11:00 AM[0m  🔵  FittingSession entity defines fitting room session management  
+  [2m#3287[0m            🔵  Git diff confirms scope of changes across frontend and backend  
+[2m../../mnt/d/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3288[0m            ✅  Fitting-user.vue reverted to previous commit  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3289[0m  [2m11:01 AM[0m  ✅  FittingController upgraded to thread-safe session management  
+  [2m#3290[0m            🟣  Fitting operation locking prevents concurrent writes per session  
+[2mGeneral[0m
+  [2m#3294[0m  [2m11:09 AM[0m  🔵  Compilation failure from incompatible entity changes  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3295[0m  [2m11:13 AM[0m  🔵  双耳验配功能实现计划已就绪  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java[0m
+  [2m#3296[0m            ✅  Task 1 完成：数据库层设备字段迁移  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3297[0m            ✅  Task 2 预备：为 FittingController 添加双耳设备相关导入  
+  [2m#3298[0m            ✅  Task 2 预备：注入 FittingSessionDeviceMapper 依赖  
+  [2m#3299[0m            ✅  Task 2 完成：generateCode 接口支持 devices 数组  
+  [2m#3300[0m  [2m11:14 AM[0m  ✅  Task 3 完成：joinSession 接口返回 devices 设备列表  
+  [2m#3301[0m            🔴  verify-device 方法编译修复并支持双耳定向验证  
+  [2m#3302[0m            🟣  Task 4 完成：新增 POST /fitting/session/{sessionId}/send 接口  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java[0m
+  [2m#3303[0m            🔵  WebSocket Handler 存在编译错误  
+  [2m#3304[0m  [2m11:15 AM[0m  ✅  Task 5 完成：WebSocket 心跳返回设备列表数组  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3305[0m            ✅  Task 9 完成：后端操作串行化控制  
+  [2m#3306[0m  [2m11:16 AM[0m  ✅  操作串行化范围细化：仅烧录（write）加锁  
+[2m../../mnt/d/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3307[0m  [2m11:17 AM[0m  ✅  Task 6 完成：fitting-user 双耳检测并上报 devices 数组  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3308[0m  [2m11:21 AM[0m  ✅  用户要求将设备锁定扩展到试听操作  
+  [2m#3309[0m            🔴  异常处理中移除操作状态的条件判断遗漏  
+[2mGeneral[0m
+  [2m#3314[0m  [2m11:28 AM[0m  🔵  Flutter Real Device Debugging DevTools URL Error  
+[2md:\wechatMPproject\log\debugger.io-1778815933079.log[0m
+  [2m#3315[0m  [2m11:32 AM[0m  🔴  Verification Code Generation UI Issue  
+[2md:/wechatMPproject/log/debugger.io-1778815933079.log[0m
+  [2m#3316[0m  [2m11:33 AM[0m  🔵  /fitting/code API Returns 500 Internal Server Error  
+[2md:\wechatMPproject\log\console-1778825990335.log[0m
+  [2m#3323[0m  [2m2:21 PM[0m  🔴  WeChat MP Project - WS Reconnection and Download State Bugs  
+  [2m#3324[0m  [2m2:22 PM[0m  🔴  WeChat MP - Session Full Error on WS Reconnect  
+[2mGeneral[0m
+  [2m#3325[0m  [2m2:25 PM[0m  🔵  Investigating user download failure as root cause  
+[2mHeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3326[0m  [2m2:26 PM[0m  🔵  Device verification flow in fitting-user.vue  
+[2mHeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3327[0m           🔵  FittingController constructs verification_required message  
+[2mGeneral[0m
+  [2m#3328[0m  [2m2:30 PM[0m  🔴  Session disconnection handling requires fix  
+[2mHeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java[0m
+  [2m#3329[0m           🔵  FittingWebSocketHandler current disconnection behavior  
+  [2m#3330[0m  [2m2:31 PM[0m  🔴  Session disconnection handling now differentiates by role  
+[2mfitting-user.js[0m
+  [2m#3337[0m  [2m2:45 PM[0m  🔵  Device SN Registration Mismatch in Fitting Workflow  
+[2mGeneral[0m
+  [2m#3338[0m           🔵  Hearing Aid Fitting Workflow Architecture  
+  [2m#3339[0m  [2m2:47 PM[0m  🔵  Database verification requirement added to session  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3340[0m           🔵  FittingSessionDevice query patterns found in server  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java[0m
+  [2m#3341[0m           🔵  FittingSessionDevice data flow implemented in controller  
+[2mble-service.js[0m
+  [2m#3342[0m  [2m2:51 PM[0m  🔴  BLE ear-side switching fails to update UI when device disconnected  
+[2mGeneral[0m
+  [2m#3344[0m  [2m2:52 PM[0m  🟣  Single ear mode should hide unavailable ear option  
+[2m../../mnt/d/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3345[0m           🔵  Current action sheet shows both ears regardless of connection status  
+[2mD:/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3346[0m  [2m2:55 PM[0m  🔴  Vue compiler error: missing semicolon in fitting-fitter.vue  
+[2md:\wechatMPproject\log\debugger.io-1778828677671.log[0m
+  [2m#3347[0m  [2m3:05 PM[0m  🔵  State notification missing after left ear flashing completes  
+[2mGeneral[0m
+  [2m#3348[0m  [2m3:11 PM[0m  ⚖️  Cross-system notification requirement for burning status  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3349[0m  [2m3:12 PM[0m  🟣  Implemented burn completion cross-system notification  
+[2md:\wechatMPproject\log\console-1778830078814.log[0m
+  [2m#3366[0m  [2m3:28 PM[0m  🔵  WeChat Mini Program firmware burning still failing  
+  [2m#3367[0m  [2m3:29 PM[0m  🔵  WeChat Mini Program firmware burning flow analysis  
+[2md:\wechatMPproject\log\debugger.io-1778830460254.log[0m
+  [2m#3368[0m  [2m3:35 PM[0m  🔴  Earbud flashing state conflict - right ear send fails while left ear flashing  
+[2mGeneral[0m
+  [2m#3369[0m  [2m3:36 PM[0m  🔵  Memory agent needs visible entry logging  
+[2md:\wechatMPproject\log\debugger.io-1778830782321.log[0m
+  [2m#3370[0m  [2m3:40 PM[0m  🔵  WeChat Mini Program Debug Log Analysis  
+[2m../../mnt/d/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3371[0m           🔴  Log File References Wrong Source File  
+[2m../../mnt/d/wechatMPproject/log/debugger.io-1778831034466.log[0m
+  [2m#3372[0m  [2m3:45 PM[0m  🔵  A0响应因无pendingPromise被丢弃  
+[2mGeneral[0m
+  [2m#3373[0m  [2m3:50 PM[0m  🔵  Embedded page entry logging for firmware verification  
+[2m../../mnt/d/wechatMPproject/HeafitMP/HeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3374[0m  [2m3:51 PM[0m  🔵  Burn firmware flow with operation lock release  
+  [2m#3375[0m           🔵  Verification and file download flow in fitting workflow  
+[2mGeneral[0m
+  [2m#3376[0m  [2m3:52 PM[0m  🔵  User frustrated with unresolved code errors  
+  [2m#3377[0m  [2m3:54 PM[0m  🔵  Session used skill and user emphasized learning extraction  
+[2m../../home/nan/.claude/skills/lessons-learned/lessons.json[0m
+  [2m#3378[0m  [2m3:55 PM[0m  🔵  Lessons-learned knowledge base contains 27 entries across 6 projects  
+  [2m#3379[0m           🔵  Lesson 28 added: check all code paths before modifying callbacks  
+[2mGeneral[0m
+  [2m#3380[0m  [2m3:57 PM[0m  ✅  Removed try-listening button from fitting terminal UI  
+[2mHeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3381[0m           🔵  Located send-to-ear trial functionality in fitting-fitter.vue  
+[2md:\wechatMPproject\log\debugger.io-1778831854393.log[0m
+  [2m#3382[0m  [2m3:58 PM[0m  🔵  Heartbeat packets not updating device info  
+  [2m#3383[0m  [2m3:59 PM[0m  🔵  Device info mismatch between pong and A0 responses  
+  [2m#3384[0m  [2m4:00 PM[0m  🔵  Heartbeat returns stale database records, not live BLE data  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3385[0m  [2m4:01 PM[0m  🟣  Added update-device API for syncing live BLE data to database  
+[2md:\wechatMPproject\log\debugger.io-1778831854393.log[0m
+  [2m#3386[0m  [2m4:04 PM[0m  🔵  Heartbeat packets missing device info synchronization  
+[2md:/wechatMPproject/log/debugger.io-1778831854393.log[0m
+  [2m#3387[0m           🔵  A0 responses discarded with no pending promise handler  
+[2mHeafitMP.Web/src/pages/fitting-user/fitting-user.vue[0m
+  [2m#3388[0m           🔴  Heartbeat device sync logic is inverted  
+  [2m#3389[0m  [2m4:05 PM[0m  🔴  Server pong returns array but client expects single object  
+  [2m#3390[0m           🟣  Added sessionDevices ref for heartbeat device comparison  
+  [2m#3391[0m           ✅  Session devices captured at code generation time  
+  [2m#3392[0m  [2m4:06 PM[0m  🔴  Heartbeat pong handler rewritten to read A0 from device  
+[2mHeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3393[0m           🔵  Server endpoint /update-device does not exist  
+  [2m#3394[0m           🟣  Added server endpoint /update-device for heartbeat device sync  
+[2mpages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3395[0m  [2m4:07 PM[0m  🔴  Vue compilation error blocks deployment  
+[2mHeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3396[0m  [2m4:08 PM[0m  🔴  Fixed missing closing tag in fitting-fitter.vue  
+[2mGeneral[0m
+  [2m#3402[0m  [2m4:28 PM[0m  🟣  Sync success triggers immediate verification notification  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3403[0m           🟣  WebSocket immediate notification after device sync  
+[2mGeneral[0m
+  [2m#3404[0m  [2m4:32 PM[0m  🔴  验配端用户设备信息仅显示左耳问题  
+[2mfitting-fitter.js[0m
+  [2m#3405[0m  [2m4:34 PM[0m  🔵  WebSocket Session Management for Ear Device Connection  
+[2mGeneral[0m
+  [2m#3406[0m  [2m5:00 PM[0m  🟣  烧录时添加物料号会话绑定校验  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3407[0m  [2m5:01 PM[0m  🔵  发现现有的 verify-device 接口实现  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java[0m
+  [2m#3408[0m           🔵  FittingSessionDevice 实体结构解析  
+  [2m#3409[0m  [2m5:02 PM[0m  🔄  FittingSessionDevice 实体分离绑定值与同步值  
+[2m../../mnt/d/HeafitMP-server/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java[0m
+  [2m#3410[0m           ✅  会话创建时初始化 currentSn 和 currentMaterialNo  
+  [2m#3411[0m           🔴  update-device 接口更新逻辑需修改  
+[2mGeneral[0m
+  [2m#3420[0m  [2m5:33 PM[0m  🔵  Git commit message generation in session  
+[2mHeafitMP.Web/src/pages/fitting-fitter/fitting-fitter.vue[0m
+  [2m#3421[0m  [2m5:35 PM[0m  ✅  Frontend fitting pages significantly modified  
+[2mGeneral[0m
+  [2m#3422[0m           🔵  Recent commits show active remote fitting feature development  
+
+
+[2mAccess 910k tokens of past research & decisions for just 21,722t. Use the claude-mem skill to access memories by ID.[0m
+
+View Observations Live @ http://localhost:37777

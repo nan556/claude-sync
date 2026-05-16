@@ -1,0 +1,3497 @@
+diff --git a/sdk/apps/common/HJX/HJX_Tsk.c b/sdk/apps/common/HJX/HJX_Tsk.c
+index 659cd26..149c6c7 100644
+--- a/sdk/apps/common/HJX/HJX_Tsk.c
++++ b/sdk/apps/common/HJX/HJX_Tsk.c
+@@ -1,1402 +1,1427 @@
+-#include "HJX_Tsk.h"
+-#include "asm/iic_soft.h"
+-#include "usb/otg.h"
+-#include "app_action.h"
+-#include "application/eq_config.h"
+-
+-
+-u8 gHJXOFFFlag=0;
+-u8 gBTConFlag=0;
+-u8 gBLEConFlag=0;
+-u8 gHJXTimer=0;
+-u16 gHJXPairTimer=0;
+-u8 gHJXModeFlag=0;
+-u16 gHJXWriteTimer=0;
+-//static u8 T_EEP[EEP_SIZE];
+-u8 gHJXClearFlag=1;
+-HJX_VAR hjx_var={
+-	.bleflag=2,
+-};
+-HAPVol gHJXHAPVol;
+-AutoOff gHJXAutoOff={
+-
+-	.bleAutoOffCnt=0,
+-	.btAutoOffCnt=C_BTOffTime,
+-	.step=2,
+-};
+-BLECMDData gHJXBleData;
+-A0DataPacket gHJXA0DataPacket;
+-u8 * gHJXEEPPointer=NULL;
+-HAPInfo gHJXHAPInfo={0};
+-u16 T_AddrTable[4]={0x1CE0,0x3CE0,0x5CE0,0x7CE0};
+-u16 T_VolAddrTable[4]={0x35E,0x235E,0x435E,0x635E};
+-u16 T_EQUALIZERADDRTable[4]={0x1d45,0x3d45,0x5d45,0x7d45};
+-void s_HJXPostMsg(u8 key_value,u8 key_event)
+-{
+-	struct sys_event e;
+-
+-    e.type = SYS_KEY_EVENT;
+-    e.u.key.init = 1;
+-    e.u.key.type = KEY_DRIVER_TYPE_SOFTKEY;//
+-    e.u.key.event = key_event;
+-    e.u.key.value = key_value;
+-    e.u.key.tmr = timer_get_ms();
+-	e.arg  = (void *)DEVICE_EVENT_FROM_KEY;
+-	// printf("s_HjXPostMsg");
+-	sys_event_notify(&e);
+-}
+-void s_HJXAMPOnOff(u8 cmd)
+-{
+-	printf("%s :%d\n",__FUNCTION__,cmd);
+-//	if(cmd)
+-//		PIOG->OUT|=BIT(8);
+-//	else
+-//		PIOG->OUT&=~BIT(8);
+-}
+-
+-u8 s_HJX_app_get_curr_task()
+-{
+-	struct application *app = get_current_app();
+-	return app->action;
+-
+-}
+-
+-
+-
+-#define PLedPort JL_PORTC
+-#define bBLedBit  BIT(4)
+-
+-#define C_LEDONTIME 20
+-#define C_LEDOFFTIME 100
+-
+-u8 gHJXLedMode=C_BLEDON_1S;
+-u8 gHJXLedStep=0;
+-u8 gHJXGLedMode=C_GLEDOFF;
+-u8 gHJXRLedMode=C_RLEDOFF;
+-#define C_LED_MAX_LIGHT 6000
+-void s_HJXLedOnOff(u8 cmd)
+-{
+-//	PLedPort->DIR&=~bBLedBit;
+-//	PLedPort->DIE|=bBLedBit;
+-//	PLedPort->PU&=~bBLedBit;
+-//	PLedPort->PD&=~bBLedBit;
+-	switch(cmd)
+-	{
+-		case 0:
+-			//PLedPort->OUT&=~bBLedBit;
+-			set_timer_pwm_duty(JL_TIMER5,0);
+-			break;
+-		case 1:
+-			//PLedPort->OUT|=bBLedBit;
+-			set_timer_pwm_duty(JL_TIMER5,C_LED_MAX_LIGHT);
+-			break;
+-		case 2:
+-			PLedPort->OUT^=bBLedBit;
+-			break;
+-	}
+-}
+-
+-
+-void s_HJXBLEDTsk()
+-{
+-	static u16 cnt=0;
+-	static u16 step=0;
+-	switch(gHJXLedMode)
+-	{
+-		case C_BLEDFLASH:
+-			cnt++;
+-			if(cnt<C_LEDONTIME)
+-				s_HJXLedOnOff(1);
+-			else if(cnt<C_LEDONTIME+C_LEDOFFTIME)
+-				s_HJXLedOnOff(0);
+-			else
+-				cnt=0;
+-
+-			break;
+-		case C_BLEDON:
+-
+-			s_HJXLedOnOff(1);
+-
+-
+-			break;
+-		case C_BLEDON_1S:
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					cnt=0;
+-					s_HJXLedOnOff(1);
+-					gHJXLedStep++;
+-					break;
+-				case 1:
+-					cnt++;
+-					if(cnt>=100)
+-					{
+-						gHJXLedMode=C_BLEDOFF;
+-					}
+-					break;
+-			}
+-
+-			break;
+-		case C_BLEDFASTFLASH_1S:
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					cnt=0;
+-					gHJXLedStep++;
+-					break;
+-				case 1:
+-					cnt++;
+-					if(cnt<C_LEDOFFTIME)
+-					{
+-						s_HJXLedOnOff(1);
+-					}
+-					else if(cnt<C_LEDONTIME+C_LEDOFFTIME)
+-					{
+-						s_HJXLedOnOff(0);
+-					}
+-					else
+-					{
+-						if(gBLEConFlag)
+-							s_SetLED(C_BLEDON);
+-						else
+-							s_SetLED(C_BLEDFASTFLASH);
+-					}
+-					break;
+-			}
+-
+-
+-			break;
+-		case C_BLEDOFF:
+-			s_HJXLedOnOff(0);
+-			break;
+-		case C_BLEDFASTFLASH:
+-
+-			cnt++;
+-			if(cnt<C_LEDONTIME)
+-				s_HJXLedOnOff(1);
+-			else if(cnt<C_LEDONTIME+50)
+-				s_HJXLedOnOff(0);
+-			else
+-				cnt=0;
+-
+-			break;
+-		case C_BLEDFLASH_2S:
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					s_HJXLedOnOff(1);
+-					cnt=0;
+-					gHJXLedStep++;
+-					break;
+-				case 1:
+-					cnt++;
+-					if(cnt>200)
+-						s_HJXLedOnOff(0);
+-					break;
+-			}
+-			break;
+-		case C_BLEDFASTFLASH_2S:
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					step=0;
+-					cnt=0;
+-					gHJXLedStep++;
+-					break;
+-				case 1:
+-					step++;
+-					if(step>=200)
+-						gHJXLedStep++;
+-
+-					cnt++;
+-					if(cnt<50)
+-						s_HJXLedOnOff(1);
+-					else if(cnt<50+50)
+-						s_HJXLedOnOff(0);
+-					else
+-						cnt=0;
+-					break;
+-				case 2:
+-
+-					s_HJXLedOnOff(0);
+-					break;
+-			}
+-			break;
+-		case C_BLEDFASTFLASH_3S:
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					step=0;
+-					cnt=0;
+-					gHJXLedStep++;
+-					break;
+-				case 1:
+-					step++;
+-					if(step>=300)
+-						gHJXLedStep++;
+-
+-					cnt++;
+-					if(cnt<50)
+-						s_HJXLedOnOff(1);
+-					else if(cnt<50+50)
+-						s_HJXLedOnOff(0);
+-					else
+-						cnt=0;
+-					break;
+-				case 2:
+-
+-					s_HJXLedOnOff(0);
+-					break;
+-			}
+-			break;
+-		case C_BLDEBREATH:
+-			static u16 pwm=0;
+-
+-			switch(gHJXLedStep)
+-			{
+-				case 0:
+-					pwm+=100;
+-					if(pwm>=C_LED_MAX_LIGHT)
+-						gHJXLedStep++;
+-					break;
+-				case 1:
+-					if(pwm)
+-						pwm-=100;
+-					else
+-						gHJXLedStep--;
+-					break;
+-			}
+-			set_timer_pwm_duty(JL_TIMER5,pwm);
+-			break;
+-
+-	}
+-}
+-
+-
+-void s_SetLED(u8 step)
+-{
+-	if((step==gHJXLedMode)&&(step!=C_BLEDFASTFLASH_3S))
+-		return ;
+-	gHJXLedMode=step;
+-	gHJXLedStep=0;
+-}
+-
+-u8 s_GetBLedMode()
+-{
+-	return gHJXLedMode;
+-}
+-
+-
+-void	s_SendOffMsg(void)
+-{
+-	static u8 SendCnt=0;
+-	if(gHJXOFFFlag==1)
+-	{
+-		if(SendCnt<20)
+-		{
+-			if(SendCnt==0)
+-				s_HJXPostMsg(KEY_POWEROFF,KEY_EVENT_LONG);
+-			else
+-				s_HJXPostMsg(KEY_POWEROFF_HOLD,KEY_EVENT_HOLD);
+-			SendCnt++;
+-		}
+-		//s_HJXPostMsg(HJX_KEY_POWER_OFF,KEY_EVENT_CLICK);
+-
+-	}
+-}
+-
+-
+-
+-
+-#define HJX_IIC 0
+-
+-void s_HJXEEPTsk()
+-{
+-
+-
+-	static u16 cnt=0,ucnt=0;
+-	static u16 addr=0,size=64;
+-	u16 ack;
+-	switch(gHJXHAPInfo.EEPStep)
+-	{
+-		case 0:
+-
+-			break;
+-		case 1:
+-			soft_iic_cfg[0].delay=50;
+-			soft_iic_start(HJX_IIC);
+-			ack=soft_iic_tx_byte(HJX_IIC,0xA0);
+-			//printf("ack=%d\n",ack);
+-			ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
+-			//printf("ack=%d\n",ack);
+-			ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
+-			//printf("ack=%d\n",ack);
+-			ack=soft_iic_write_buf(HJX_IIC,&gHJXEEPPointer[addr],64);
+-			printf("ack=%d\n",ack);
+-			soft_iic_stop(HJX_IIC);
+-			if(ack!=64)
+-			{
+-				break;
+-			}
+-			addr+=64;
+-			cnt++;
+-			if(cnt>=(EEP_SIZE/64))
+-			{
+-				addr=0;
+-				cnt=0;
+-				gHJXHAPInfo.EEPStep=3;
+-				s_HJXHAP150SW(0);
+-				s_HJXPostMsg(C_HJX_KEY_VALUE4,KEY_EVENT_CLICK);//send A0 packet
+-			}
+-			break;
+-		case 2:
+-			{
+-				soft_iic_start(HJX_IIC);
+-
+-				ack=soft_iic_tx_byte(HJX_IIC,0xA0);
+-				printf("ack=%d\n",ack);
+-
+-				ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
+-				printf("ack=%d\n",ack);
+-				ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
+-				printf("ack=%d\n",ack);
+-
+-				soft_iic_start(HJX_IIC);
+-				ack=soft_iic_tx_byte(HJX_IIC,0xA1);
+-				printf("ack=%d\n",ack);
+-
+-
+-
+-				ack=soft_iic_read_buf(HJX_IIC,gHJXEEPPointer,32*1024);
+-				printf("ack=%d\n",ack);
+-
+-				soft_iic_stop(HJX_IIC);
+-
+-			}
+-			sys_timer_modify(gHJXHAPInfo.readtimer, 10);
+-
+-			break;
+-		case 3:
+-			s_HJXHAP150SW(1);
+-			hjx_var.hapinittime=C_HAPInitTime;
+-			gHJXHAPInfo.EEPStep=0;
+-			break;
+-		case 4:
+-
+-			break;
+-		case 5:
+-
+-			soft_iic_cfg[0].delay=50;
+-			soft_iic_start(HJX_IIC);
+-			ack=soft_iic_tx_byte(HJX_IIC,0xA0);
+-			//printf("ack=%d\n",ack);
+-			ack=soft_iic_tx_byte(HJX_IIC,(HAPMODE1_ADDR+addr)>>8);
+-			//printf("ack=%d\n",ack);
+-			ack=soft_iic_tx_byte(HJX_IIC,(HAPMODE1_ADDR+addr)&0xFF);
+-			printf("ack=%d\n",ack);
+-
+-			ack=soft_iic_write_buf(HJX_IIC,&gHJXEEPPointer[0x2000*gHJXHAPInfo.mode+addr],size);
+-			printf("addr=%x\n",addr);
+-			printf("ack=%d\n",ack);
+-
+-			soft_iic_stop(HJX_IIC);
+-			if(ack!=size)
+-			{
+-
+-				break;
+-			}
+-			addr+=64;
+-			if(HAPMODE1_SIZE-addr<64)
+-			{
+-
+-				size=HAPMODE1_SIZE-addr;
+-
+-			}
+-			cnt++;
+-			u8 times=(HAPMODE1_SIZE%64)?1:0;
+-			printf("times:%d\n",times);
+-			if(cnt>=((HAPMODE1_SIZE/64)+times))
+-			{
+-				size=64;
+-				addr=0;
+-				cnt=0;
+-				gHJXHAPInfo.EEPStep=3;
+-				s_HJXHAP150SW(0);
+-				s_HJXPostMsg(C_HJX_KEY_VALUE4,KEY_EVENT_CLICK);//send A0 packet
+-
+-			}
+-			break;
+-		case 6:
+-
+-
+-			break;
+-
+-	}
+-
+-
+-
+-
+-}
+-
+-
+-void s_HJXHAPSetVolUpIO(u8 cmd,u8 tone)
+-{
+-	PVOLUPPort->DIR&=~bVOLUPBit;
+-	PVOLUPPort->DIE|=bVOLUPBit;
+-	PVOLUPPort->PU&=~bVOLUPBit;
+-	PVOLUPPort->PD&=~bVOLUPBit;
+-
+-	PINT0Port->DIR&=~bINT0Bit;
+-	PINT0Port->DIE|=bINT0Bit;
+-	PINT0Port->PU&=~bINT0Bit;
+-	PINT0Port->PD&=~bINT0Bit;
+-
+-	if(cmd)
+-		PVOLUPPort->OUT|=bVOLUPBit;
+-	else
+-		PVOLUPPort->OUT&=~bVOLUPBit;
+-	if(tone)
+-		PINT0Port->OUT|=bINT0Bit;
+-	else
+-		PINT0Port->OUT&=~bINT0Bit;
+-}
+-void s_HJXHAPSetVolDownIO(u8 cmd,u8 tone)
+-{
+-	PVOLDOWNPort->DIR&=~bVOLDOWNBit;
+-	PVOLDOWNPort->DIE|=bVOLDOWNBit;
+-	PVOLDOWNPort->PU&=~bVOLDOWNBit;
+-	PVOLDOWNPort->PD&=~bVOLDOWNBit;
+-
+-	PINT1Port->DIR&=~bINT1Bit;
+-	PINT1Port->DIE|=bINT1Bit;
+-	PINT1Port->PU&=~bINT1Bit;
+-	PINT1Port->PD&=~bINT1Bit;
+-	if(cmd)
+-		PVOLDOWNPort->OUT|=bVOLDOWNBit;
+-	else
+-		PVOLDOWNPort->OUT&=~bVOLDOWNBit;
+-	if(tone)
+-		PINT1Port->OUT|=bINT1Bit;
+-	else
+-		PINT1Port->OUT&=~bINT1Bit;
+-}
+-void s_HJXHAPVOLTsk()
+-{
+-	switch(gHJXHAPVol.step)
+-	{
+-		case 0:
+-			s_HJXHAPSetVolUpIO(1,1);
+-			s_HJXHAPSetVolDownIO(1,1);
+-			break;
+-		case 1 ... 10:
+-
+-			s_HJXHAPSetVolUpIO(0,gHJXHAPVol.playtone);
+-			// printf("vol up\n");
+-			gHJXHAPVol.step++;
+-			break;
+-
+-		case 11:
+-			gHJXHAPVol.step=0;
+-			break;
+-
+-
+-		case 12 ... 21:
+-
+-			// printf("vol down\n");
+-			s_HJXHAPSetVolDownIO(0,gHJXHAPVol.playtone);
+-			gHJXHAPVol.step++;
+-			break;
+-		case 22:
+-			gHJXHAPVol.step=0;
+-			break;
+-	}
+-}
+-void s_HJXHAPSetModeIO(u8 cmd)
+-{
+-	PINT3Port->DIR&=~bINT3Bit;
+-	PINT3Port->DIE|=bINT3Bit;
+-	PINT3Port->PU&=~bINT3Bit;
+-	PINT3Port->PD&=~bINT3Bit;
+-
+-
+-	if(cmd)
+-		PINT3Port->OUT|=bINT3Bit;
+-	else
+-		PINT3Port->OUT&=~bINT3Bit;
+-
+-}
+-void s_HJXHAPModeTsk()
+-{
+-	switch(gHJXHAPInfo.modestep)
+-	{
+-		case 0:
+-			s_HJXHAPSetModeIO(1);
+-
+-			break;
+-		case 1 ... 10:
+-
+-			s_HJXHAPSetModeIO(0);
+-			printf("mode up\n");
+-			gHJXHAPInfo.modestep++;
+-			break;
+-
+-		case 11 ... 411:
+-			s_HJXHAPSetModeIO(1);
+-			//printf("mode stop\n");
+-			gHJXHAPInfo.modestep++;
+-
+-			break;
+-		case 412:
+-			printf("modestep=0\n");
+-			gHJXHAPInfo.modestep=0;
+-			break;
+-
+-	}
+-}
+-void s_HJXReadHAP(u8 * buf ,u16 addr,u16 len)
+-{
+-
+-	u16 ack;
+-	soft_iic_start(HJX_IIC);
+-	ack=soft_iic_tx_byte(HJX_IIC,0xA0);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
+-	//printf("ack=%d\n",ack);
+-	soft_iic_start(HJX_IIC);
+-	ack=soft_iic_tx_byte(HJX_IIC,0xA1);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_read_buf(HJX_IIC,buf,len);
+-	printf("ack=%d\n",ack);
+-	soft_iic_stop(HJX_IIC);
+-}
+-void s_HJXWriteHAP(u8 *buf,u16 addr,u8 len)
+-{
+-
+-	u8 ack;
+-	soft_iic_start(HJX_IIC);
+-	ack=soft_iic_tx_byte(HJX_IIC,0xA0);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
+-	//printf("ack=%d\n",ack);
+-	ack=soft_iic_write_buf(HJX_IIC,buf,len);
+-	printf("ack=%d\n",ack);
+-	soft_iic_stop(HJX_IIC);
+-	os_time_dly(1);
+-
+-}
+-u32 s_GetEEPSum()
+-{
+-	if(!gHJXEEPPointer)
+-		return 0;
+-
+-	u32 cs=0;
+-	for(u16 i=0;i<EEP_SIZE;i++)
+-	{
+-		cs+=gHJXEEPPointer[i];
+-	}
+-	return cs;
+-}
+-void s_FillA0DataPacket(u8 cmd)
+-{
+-
+-
+-	u8 index=0;
+-	u8 a0datapacket[67];
+-	u16 appcs=s_GetEEPSum();
+-	a0datapacket[index++]=A0_HEAD;
+-
+-	//s_HJXReadHAP(&a0datapacket[index],T_AddrTable[gHJXHAPInfo.mode],4);
+-	//index+=4;
+-	a0datapacket[index++]=gHJXHAPInfo.mode;
+-	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode],1);
+-	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+1,1);
+-	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+2,1);
+-	a0datapacket[index++]=(s_HJXReadCurVol()>>10)&0x1F;
+-	a0datapacket[index++]=cmd;
+-	a0datapacket[index++]=(s_HJXReadCurVol())&0x1F;
+-	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+3,1);
+-	s_HJXRead70132K(&a0datapacket[index++],A0_NLEVELADDR,1);
+-	a0datapacket[index++]=battery_value_to_phone_level()*10;
+-	a0datapacket[index++]=appcs>>8;
+-	a0datapacket[index++]=appcs&0xFF;
+-	printf("appcs:%x",appcs);
+-	s_HJXRead70132K(&a0datapacket[index],A0_MATERIALNUMBERADDR,4);
+-	index+=4;
+-
+-	s_HJXRead70132K(&a0datapacket[index],A0_MODELADDR,16);
+-	index+=16;
+-
+-	s_HJXRead70132K(&a0datapacket[index],A0_SERIALNUMBERADDR,16);
+-	index+=16;
+-
+-	s_HJXRead70132K(&a0datapacket[index],T_EQUALIZERADDRTable[gHJXHAPInfo.mode],16);
+-	index+=16;
+-	a0datapacket[index++]=A0_BT_VERSION;
+-
+-	s_HJXRead70132K(&a0datapacket[index],A0_HAPVERSIONADDR,2);
+-	index+=2;
+-
+-	s_HJXRead70132K(&a0datapacket[index++],A0_HAPHARDVERSIONADDR,1);
+-	a0datapacket[index++]=gHJXHAPInfo.rightleftflag;
+-	u8 cs=0;
+-	for(u8 i=0;i<index;i++)
+-	{
+-		cs+=a0datapacket[i];
+-	}
+-	a0datapacket[index++]=cs;
+-	printf_buf(a0datapacket,67);
+-	s_HJXBleSend(a0datapacket,sizeof(a0datapacket));
+-}
+-void s_FillF8datapacket(u16 num)
+-{
+-	printf("s_FillF8datapacket\n");
+-	u8 F8datapacket[265];
+-	u16 index=0;
+-	u16 saddr=256*num,eaddr=(num*256)+255;
+-	F8datapacket[index++]=F8_HEAD;
+-	u16 appcs=0;
+-
+-
+-	for(u16 i=0;i<gHJXBleData.len-1;i++)
+-	{
+-		appcs+=gHJXBleData.buf[i];
+-	}
+-	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
+-		F8datapacket[index++]=0;
+-	else
+-		F8datapacket[index++]=1;
+-	F8datapacket[index++]=num;
+-	F8datapacket[index++]=saddr>>8;
+-	F8datapacket[index++]=saddr&0xFF;
+-	F8datapacket[index++]=eaddr>>8;
+-	F8datapacket[index++]=eaddr&0xFF;
+-//	if(!gHJXHAPInfo.writeflag)
+-//		s_HJXReadHAP(&F8datapacket[index],saddr,256);
+-//	else
+-		s_HJXRead70132K(&F8datapacket[index],saddr,256);
+-	memcpy(&gHJXEEPPointer[saddr],&F8datapacket[index],256);
+-	printf_buf(&gHJXEEPPointer[saddr],256);
+-	index+=256;
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F8datapacket[i];
+-	}
+-	F8datapacket[index]=cs&0xFF;
+-	//printf_buf(F8datapacket,sizeof(F8datapacket));
+-	s_HJXBleSend(F8datapacket,sizeof(F8datapacket));
+-}
+-void s_FillF9datapacket(u16 num)
+-{
+-	printf("s_FillF9datapacket\n");
+-	u8 F9datapacket[4];
+-	u16 index=0;
+-	u16 appcs=s_GetEEPSum();
+-	F9datapacket[index++]=0xF9;
+-	F9datapacket[index++]=appcs>>8;
+-	F9datapacket[index++]=appcs&0xff;
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F9datapacket[i];
+-	}
+-	F9datapacket[index]=cs&0xFF;
+-	printf_buf(F9datapacket,sizeof(F9datapacket));
+-	s_HJXBleSend(F9datapacket,sizeof(F9datapacket));
+-}
+-void s_FillF6datapacket(u16 saddr,u16 eaddr)
+-{
+-	printf("s_FillF6datapacket\n");
+-	//u8 F6datapacket[264];
+-	u8 *F6datapacket=(u8 *)malloc(eaddr-saddr+6);
+-	u16 index=0;
+-
+-	F6datapacket[index++]=F6_HEAD;
+-	F6datapacket[index++]=saddr>>8;
+-	F6datapacket[index++]=saddr&0xFF;
+-	F6datapacket[index++]=eaddr>>8;
+-	F6datapacket[index++]=eaddr&0xFF;
+-	//s_HJXReadHAP(&F6datapacket[index],saddr,eaddr-saddr);
+-	s_HJXRead70132K(&F6datapacket[index],saddr,eaddr-saddr);
+-	index+=eaddr-saddr;
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F6datapacket[i];
+-	}
+-	F6datapacket[index]=cs&0xFF;
+-	s_HJXBleSend(F6datapacket,sizeof(F6datapacket));
+-	free(F6datapacket);
+-
+-}
+-
+-
+-void s_FillF1datapacket()
+-{
+-	printf("s_FillF1datapacket\n");
+-	u8 F1datapacket[9];
+-	u16 index=0,appcs=0;
+-	F1datapacket[index++]=F1_HEAD;
+-	for(u16 i=0;i<gHJXBleData.len-1;i++)
+-	{
+-		appcs+=gHJXBleData.buf[i];
+-	}
+-	printf("appcs:%x,%x\n",appcs,gHJXBleData.buf[gHJXBleData.len-1]);
+-	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
+-	{
+-		F1datapacket[index++]=0;
+-		memcpy(&gHJXEEPPointer[gHJXBleData.buf[2]*256],&gHJXBleData.buf[7],256);
+-	}
+-	else
+-		F1datapacket[index++]=1;
+-	F1datapacket[index++]=gHJXBleData.buf[1];
+-	F1datapacket[index++]=gHJXBleData.buf[2];
+-	F1datapacket[index++]=gHJXBleData.buf[3];
+-	F1datapacket[index++]=gHJXBleData.buf[4];
+-	F1datapacket[index++]=gHJXBleData.buf[5];
+-	F1datapacket[index++]=gHJXBleData.buf[6];
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F1datapacket[i];
+-	}
+-	F1datapacket[index]=cs&0xFF;
+-	printf_buf(F1datapacket,9);
+-	s_HJXBleSend(F1datapacket,sizeof(F1datapacket));
+-	if(gHJXBleData.buf[2]>=127)
+-	{
+-
+-		int ret=s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-		gHJXHAPInfo.EEPStep=C_HAP_WRITE_32K;
+-		gHJXHAPInfo.mode=0;
+-		syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
+-
+-	}
+-}
+-void s_FillF2datapacket()
+-{
+-	printf("s_FillF2datapacket\n");
+-	u8 F2datapacket[9];
+-	u16 index=0,appcs=0;
+-	F2datapacket[index++]=F2_HEAD;
+-	for(u16 i=0;i<gHJXBleData.len-1;i++)
+-	{
+-		appcs+=gHJXBleData.buf[i];
+-	}
+-	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
+-	{
+-		F2datapacket[index++]=0;
+-		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]],&gHJXBleData.buf[7],((gHJXBleData.buf[5]<<8)|gHJXBleData.buf[6])-((gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]));
+-
+-	}
+-	else
+-		F2datapacket[index++]=1;
+-	F2datapacket[index++]=gHJXBleData.buf[1];
+-	F2datapacket[index++]=gHJXBleData.buf[2];
+-	F2datapacket[index++]=gHJXBleData.buf[3];
+-	F2datapacket[index++]=gHJXBleData.buf[4];
+-	F2datapacket[index++]=gHJXBleData.buf[5];
+-	F2datapacket[index++]=gHJXBleData.buf[6];
+-
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F2datapacket[i];
+-	}
+-	F2datapacket[index]=cs&0xFF;
+-	printf_buf(F2datapacket,sizeof(F2datapacket));
+-	s_HJXBleSend(F2datapacket,sizeof(F2datapacket));
+-}
+-void s_FillF3datapacket()
+-{
+-	u32 appcs=(gHJXBleData.buf[1]<<24)|(gHJXBleData.buf[2]<<16)|(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4];
+-	u32 eepcs=0;
+-	for(u16 i=0;i<EEP_SIZE;i++)
+-	{
+-		eepcs+=gHJXEEPPointer[i];
+-	}
+-
+-	printf("s_FillF3datapacket\n");
+-	u8 F3datapacket[3];
+-	u16 index=0;
+-	F3datapacket[index++]=F3_HEAD;
+-	printf("appcs:%x,eepcs:%x\n",appcs,eepcs);
+-	if(eepcs==appcs)
+-	{
+-		printf("cs ok!\n");
+-		s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-		F3datapacket[index++]=0;
+-		gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
+-
+-
+-	}
+-	else
+-	{
+-		printf("cs err!\n");
+-		F3datapacket[index++]=1;
+-	}
+-	u16 cs=0;
+-	for(u16 i=0;i<index;i++)
+-	{
+-		cs+=F3datapacket[i];
+-	}
+-	F3datapacket[index]=cs&0xFF;
+-	printf_buf(F3datapacket,sizeof(F3datapacket));
+-	s_HJXBleSend(F3datapacket,sizeof(F3datapacket));
+-
+-
+-}
+-u8 s_HJXStartSetVol(u8 cmd)
+-{
+-	u8 ret=0;
+-	if(cmd<gHJXHAPInfo.vol[gHJXHAPInfo.mode])
+-	{
+-		gHJXHAPVol.dir=0;
+-		gHJXHAPVol.cnt=gHJXHAPInfo.vol[gHJXHAPInfo.mode]-cmd;
+-	}
+-	else if(cmd==gHJXHAPInfo.vol[gHJXHAPInfo.mode])
+-	{
+-		ret=1;
+-	}
+-	else
+-	{
+-		gHJXHAPVol.dir=1;
+-		gHJXHAPVol.cnt=cmd-gHJXHAPInfo.vol[gHJXHAPInfo.mode];
+-	}
+-	return ret;
+-}
+-
+-int s_HJXWrite70132K(u8 *buf,u32 offset,u16 len)
+-{
+-
+-	FILE *user_fp;     //?????ß’???
+-    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ß≥
+-    extern FILE *user_info_zone_init(struct vfs_attr *attr);
+-    user_fp = user_info_zone_init(&attr);
+-	user_info_zone_earse_by_addr(user_fp, offset,len);
+-    int ret = 0;     //????????????
+-    fseek(user_fp,offset , SEEK_CUR);
+-	ret = fwrite(user_fp, buf, len);
+-    printf("write len = %d\r\n",ret);
+-    if(ret != len) {
+-        printf("write err\r\n");
+-        printf("earse all\r\n");
+-        user_info_zone_earse(user_fp, &attr);
+-
+-
+-    }
+-
+-	fclose(user_fp);
+-	return ret;
+-}
+-void s_HJXRead70132K(u8 *buf,u32 offset,u16 len)
+-{
+-	FILE *user_fp;     //?????ß’???
+-    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ß≥
+-    extern FILE *user_info_zone_init(struct vfs_attr *attr);
+-    user_fp = user_info_zone_init(&attr);
+-    int ret = 0;     //????????????
+-    fseek(user_fp,offset , SEEK_CUR);
+-	ret = fread(user_fp, buf, len);//??32?????
+-    if(ret != len) {
+-        printf("read err\r\n");
+-    }
+-	else
+-		printf("read ok\r\n");
+-
+-	fclose(user_fp);
+-}
+-void s_HJXRead70132K_HAP_BF(u8 *buf,u32 offset,u16 len)
+-{
+-	FILE *user_fp;     //?????ß’???
+-    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ß≥
+-    extern FILE *user_info_zone_init_HAP_BF(struct vfs_attr *attr);
+-    user_fp = user_info_zone_init_HAP_BF(&attr);
+-    int ret = 0;     //????????????
+-    fseek(user_fp,offset , SEEK_CUR);
+-	ret = fread(user_fp, buf, len);//??32?????
+-    if(ret != len) {
+-        printf("read err\r\n");
+-    }
+-	else
+-		printf("read ok\r\n");
+-
+-	fclose(user_fp);
+-}
+-void GetCrC(u8 *pSource, u32 len, u8 *crc)
+-{
+-u16 crc16 = 0xFFFF;
+-u32 i = 0;
+-u32 j = 0;
+-if(len > 0xFFFFFFFF-1) return;
+-while(j < len)
+-{
+-	crc16 ^= pSource[j];
+-	for(i = 0; i < 8; i++)
+-	{
+-	if(crc16 & 0x01)
+-	{
+-	crc16 >>= 1;
+-	crc16 ^= 0xA001;
+-	}
+-	else
+-	{
+-	crc16 >>= 1;
+-	}
+-	}
+-	j++;
+-}
+-	crc[0] = crc16 % 0x100;
+-	crc[1] = crc16 / 0x100;
+-}
+-void s_FillPCReaddatapacket(int saddr,int len)
+-{
+-	printf("s_FillPCReaddatapacket %d\n",len);
+-
+-	//u8 F6datapacket[264];
+-	u8 *buf=(u8 *)malloc(len+8);
+-	u16 index=0;
+-	buf[index++]=gHJXHAPInfo.rightleftflag;
+-	buf[index++]=0x03;
+-	buf[index++]=len>>24;
+-	buf[index++]=(len>>16)&0xff;
+-	buf[index++]=(len>>8)&0xff;
+-	buf[index++]=(len>>0)&0xff;
+-	//s_HJXReadHAP(&buf[index],saddr,eaddr-saddr);
+-	s_HJXRead70132K(&buf[index],saddr,len);
+-	index+=len;
+-	GetCrC(buf,index,&buf[index]);
+-	printf_buf(buf, len+8);
+-	s_HJXBleSend(buf,len+8);
+-	free(buf);
+-
+-}
+-void s_FillPCUpdatedatapacket()
+-{
+-	printf("s_FillPCUpdatedatapacket\n");
+-	u8 buf[9];
+-	u16 index=0,appcs=0;
+-	buf[index++]=gHJXHAPInfo.rightleftflag;
+-	buf[index++]=0x06;
+-	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
+-	printf("appcs:%x\n",appcs);
+-	if(appcs==(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
+-	{
+-		printf("ok!");
+-		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0)],&gHJXBleData.buf[6],1);
+-		//s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-	}
+-
+-
+-	buf[index++]=gHJXBleData.buf[2];
+-	buf[index++]=gHJXBleData.buf[3];
+-	buf[index++]=gHJXBleData.buf[4];
+-	buf[index++]=gHJXBleData.buf[5];
+-
+-	buf[index++]=gHJXBleData.buf[6];
+-	GetCrC(buf,sizeof(buf)-2,&buf[index]);
+-	printf_buf(buf,sizeof(buf));
+-	s_HJXBleSend(buf,sizeof(buf));
+-}
+-void s_FillPCTrancedatapacket()
+-{
+-	printf("s_FillPCTrancedatapacket\n");
+-	u8 buf[5];
+-	u16 index=0,appcs=0;
+-	buf[index++]=gHJXHAPInfo.rightleftflag;
+-	buf[index++]=0x10;
+-	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
+-	printf("appcs:%x\n",appcs);
+-	if(appcs==(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
+-	{
+-		printf("ok!");
+-		u32 addr=(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0);
+-		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0)],&gHJXBleData.buf[10],(gHJXBleData.buf[6]<<24)|(gHJXBleData.buf[7]<<16)|(gHJXBleData.buf[8]<<8)|(gHJXBleData.buf[9]<<0));
+-
+-		//s_HJXWriteHAP(&gHJXEEPPointer[addr],addr,64);
+-		//if(addr==(EEP_SIZE-64))
+-		{
+-
+-
+-		}
+-		buf[index++]=0;
+-	}
+-	else
+-		buf[index++]=1;
+-
+-
+-	GetCrC(buf,sizeof(buf)-2,&buf[index]);
+-	printf_buf(buf,sizeof(buf));
+-	s_HJXBleSend(buf,sizeof(buf));
+-}
+-void s_FillPCResetdatapacket()
+-{
+-	printf("s_FillPCTrancedatapacket\n");
+-	u8 buf[5];
+-	u16 index=0;
+-	buf[index++]=gHJXHAPInfo.rightleftflag;
+-	buf[index++]=0x04;
+-	buf[index++]=0;
+-
+-
+-	GetCrC(buf,index,&buf[index]);
+-	printf_buf(buf,sizeof(buf) );
+-	s_HJXBleSend(buf,sizeof(buf));
+-	//reset hap
+-	s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-	//s_HJXHAP150SW(0);
+-	//gHJXHAPInfo.EEPStep=3;
+-	gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
+-}
+-//brief: PC????????????
+-void s_HJXPCDataDeal()
+-{
+-	printf("%s\n",__FUNCTION__);
+-	u16 appcs;
+-	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
+-	printf("appcs:%x\n",appcs);
+-	if(appcs!=(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
+-		return;
+-	switch(gHJXBleData.buf[1])
+-	{
+-		case C_PC_DATA_READ:
+-			s_FillPCReaddatapacket((gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0),(gHJXBleData.buf[6]<<24)|(gHJXBleData.buf[7]<<16)|(gHJXBleData.buf[8]<<8)|(gHJXBleData.buf[9]<<0));
+-			break;
+-		case C_PC_DATA_TRANCE:
+-			s_FillPCTrancedatapacket();
+-			break;
+-		case C_PC_DATA_UPDATE:
+-
+-			s_FillPCUpdatedatapacket();
+-			break;
+-		case C_PC_DATA_RESET:
+-			s_FillPCResetdatapacket();
+-			break;
+-	}
+-}
+-//brief: app??????????
+-void s_HJXBLEDataDeal()
+-{
+-	printf("%s\n",__FUNCTION__);
+-	switch(gHJXBleData.buf[0])
+-	{
+-		case C_EEP_DATA_TRANCE:
+-
+-			s_FillF1datapacket();
+-			break;
+-		case C_EEP_DATA_CHECK:
+-
+-			s_FillF3datapacket();
+-			break;
+-		case C_EEP_DATA_UPDATE:
+-
+-			s_FillF2datapacket();
+-			break;
+-		case C_EEP_DATA_READ:
+-			s_FillF6datapacket((gHJXBleData.buf[1]<<8)|gHJXBleData.buf[2],(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]);
+-			break;
+-		case C_EEP_DATA_READ_ALL:
+-			s_FillF8datapacket(0);
+-			break;
+-		case C_EEP_DATA_READ_INDEX:
+-
+-			if(gHJXBleData.buf[2]<=127)
+-				s_FillF8datapacket(gHJXBleData.buf[2]);
+-			else
+-			{
+-
+-				s_FillF9datapacket(gHJXBleData.buf[2]);
+-				printf("hjx  write rom 32k!");
+-//				if(!gHJXHAPInfo.writeflag)
+-//				{
+-//					int ret=s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-//
+-//					gHJXHAPInfo.writeflag=1;
+-//					syscfg_write(CFG_USER_WRITE_HAP, &gHJXHAPInfo.writeflag, sizeof(gHJXHAPInfo.writeflag));
+-//				}
+-			}
+-			break;
+-		case C_HJX_BLE_READ:
+-
+-
+-			gHJXHAPInfo.vol[gHJXHAPInfo.mode]=(s_HJXReadCurVol()>>5)&0x1F;
+-			s_FillA0DataPacket(gHJXHAPInfo.vol[gHJXHAPInfo.mode]);
+-			break;
+-		case C_HJX_BLE_SET_MODE:
+-			if(hjx_var.hapinittime||gHJXHAPInfo.EEPStep)
+-				break;
+-			//gHJXHAPInfo.modecnt=1;
+-			gHJXHAPInfo.mode=gHJXBleData.buf[1];
+-			printf("gHJXHAPInfo.mode:%d\n",gHJXHAPInfo.mode);
+-			syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
+-			gHJXHAPInfo.vol[gHJXHAPInfo.mode]=(s_HJXReadCurVol()>>5)&0x1F;
+-			s_FillA0DataPacket(gHJXHAPInfo.vol[gHJXHAPInfo.mode]);
+-			printf("C_HAP_WRITE_8K\n");
+-			gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
+-			break;
+-		case C_HJX_BLE_SET_VOL:
+-			u8 vol=gHJXBleData.buf[1];
+-			if(vol==255)
+-				vol=0;
+-			if((vol<((s_HJXReadCurVol())&0x1F)))
+-				vol=((s_HJXReadCurVol())&0x1F);//min vol
+-			else if((vol>((s_HJXReadCurVol()>>10)&0x1F)))
+-				vol=((s_HJXReadCurVol()>>10)&0x1F);//max vol
+-			if(s_HJXStartSetVol(vol))
+-			{
+-				//??????A0??
+-				s_FillA0DataPacket(vol);
+-			}
+-			break;
+-		case C_HJX_BLE_RESET:
+-			s_HJXRead70132K_HAP_BF(gHJXEEPPointer,0,EEP_SIZE);
+-			s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
+-			//printf_buf(gHJXEEPPointer,EEP_SIZE/4);
+-			gHJXHAPInfo.EEPStep=C_HAP_WRITE_32K;
+-			gHJXHAPInfo.mode=0;
+-			syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
+-			break;
+-	}
+-}
+-void s_HJXPcAppDeal()
+-{
+-	switch(gHJXBleData.buf[0])
+-	{
+-		case 0x01:
+-			if(gHJXHAPInfo.rightleftflag==C_LEFT)
+-			{
+-				s_HJXPCDataDeal();
+-			}
+-			break;
+-		case 0x02:
+-			if(gHJXHAPInfo.rightleftflag==C_RIGHT)
+-			{
+-				s_HJXPCDataDeal();
+-			}
+-			break;
+-		default:
+-			s_HJXBLEDataDeal();
+-			break;
+-	}
+-}
+-void s_HJXVolSYNCTsk()
+-{
+-	if(gHJXHAPVol.cnt)
+-	{
+-		gHJXHAPVol.cnt--;
+-		if(gHJXHAPVol.dir)
+-		{
+-			s_HJXPostMsg(C_HJX_KEY_VALUE0,KEY_EVENT_CLICK);
+-		}
+-		else
+-		{
+-			s_HJXPostMsg(C_HJX_KEY_VALUE1,KEY_EVENT_CLICK);
+-		}
+-	}
+-}
+-void s_HJXModeSYNCTsk()
+-{
+-	if(gHJXHAPInfo.modecnt&&(gHJXHAPInfo.modestep==0))
+-	{
+-		gHJXHAPInfo.modecnt--;
+-
+-		{
+-
+-			gHJXHAPInfo.modestep=1;
+-		}
+-	}
+-}
+-void s_PoweronSetModeVOL()
+-{
+-	switch(gHJXHAPInfo.PoweronStep)
+-	{
+-		case 0:
+-			break;
+-		case 1:
+-			gHJXHAPInfo.modecnt=gHJXHAPInfo.mode;
+-			gHJXHAPInfo.PoweronStep++;
+-			break;
+-		case 2:
+-			if(gHJXHAPInfo.modecnt==0)
+-				gHJXHAPInfo.PoweronStep++;
+-			break;
+-		case 3:
+-			break;
+-//		case 3:
+-//			if(gHJXHAPInfo.modestep==0)
+-//				gHJXHAPInfo.PoweronStep++;
+-//			break;
+-//		case 4:
+-//			printf("s_HJXStartSetVol\n");
+-//			s_HJXStartSetVol(gHJXHAPInfo.vmvol[gHJXHAPInfo.mode]);
+-//			gHJXHAPInfo.PoweronStep++;
+-//			break;
+-	}
+-}
+-void s_HJXBtBleAutoOff()
+-{
+-	switch(gHJXAutoOff.step)
+-	{
+-		case 0:
+-			switch(hjx_var.bleflag)
+-			{
+-				case 0:
+-					if(gBTConFlag)
+-					{
+-
+-						gHJXAutoOff.btAutoOffCnt=C_BTOffTime;
+-					}
+-					else
+-					{
+-						if(gHJXAutoOff.btAutoOffCnt)
+-						{
+-
+-							gHJXAutoOff.btAutoOffCnt--;
+-							if(gHJXAutoOff.btAutoOffCnt==0)
+-							{
+-								printf("s_HJXBTEnable\n");
+-								s_HJXPostMsg(C_HJX_KEY_VALUE3,KEY_EVENT_CLICK);
+-								s_SetLED(C_BLDEBREATH);
+-								gHJXAutoOff.step++;
+-								gHJXAutoOff.btAutoOffCnt=C_BTOffTime;
+-							}
+-						}
+-					}
+-					break;
+-				case 1:
+-					if(gBLEConFlag)
+-					{
+-
+-						gHJXAutoOff.bleAutoOffCnt=C_BLEOffTime;
+-					}
+-					else
+-					{
+-						if(gHJXAutoOff.bleAutoOffCnt)
+-						{
+-							gHJXAutoOff.bleAutoOffCnt--;
+-							if(gHJXAutoOff.bleAutoOffCnt==0)
+-							{
+-								ble_module_enable(0);
+-								s_SetLED(C_BLDEBREATH);
+-								gHJXAutoOff.step++;
+-								gHJXAutoOff.bleAutoOffCnt=C_BLEOffTime;
+-							}
+-						}
+-					}
+-					break;
+-			}
+-
+-
+-
+-			break;
+-		case 1:
+-			switch(hjx_var.bleflag)
+-			{
+-				case 0:
+-					if(gHJXAutoOff.btAutoOffCnt)
+-					{
+-						gHJXAutoOff.btAutoOffCnt--;
+-						if(gHJXAutoOff.btAutoOffCnt==0)
+-						{
+-							s_SetLED(C_BLEDOFF);
+-							gHJXAutoOff.step++;
+-						}
+-					}
+-					break;
+-				case 1:
+-					if(gHJXAutoOff.bleAutoOffCnt)
+-					{
+-						gHJXAutoOff.bleAutoOffCnt--;
+-						if(gHJXAutoOff.bleAutoOffCnt==0)
+-						{
+-							s_SetLED(C_BLEDOFF);
+-							gHJXAutoOff.step++;
+-						}
+-					}
+-					break;
+-			}
+-
+-
+-			break;
+-
+-	}
+-
+-
+-
+-
+-}
+-
+-void s_HJX10ms()
+-{
+-	static u8 first=0;
+-	static u8 cnt=0,flag,ucnt=0;
+-	s_HJXBtBleAutoOff();
+-	s_HJXBLEDTsk();
+-	s_HJXHAPVOLTsk();
+-	//s_HJXHAPModeTsk();
+-	//s_PoweronSetModeVOL();
+-	cnt++;
+-	if(cnt==20)
+-	{
+-		cnt=0;
+-		s_HJXVolSYNCTsk();
+-
+-		s_HJXPostMsg(C_HJX_KEY_VALUE3, KEY_EVENT_HOLD);
+-	}
+-
+-}
+-
+-
+-
+-void s_HJXHAP150SW(u8 cmd)
+-{
+-	gHJXHAPInfo.onoff=cmd;
+-	printf("s_HJXHAP150SW %d\n",cmd);
+-	PLDOPort->DIR&=~bLDOBit;
+-	PLDOPort->DIE|=bLDOBit;
+-	PLDOPort->PU&=~bLDOBit;
+-	PLDOPort->PD&=~bLDOBit;
+-	if(cmd)
+-	{
+-		dac_power_off();
+-		//PLDOPort->OUT|=bLDOBit;
+-
+-
+-	}
+-	else
+-	{
+-		PLDOPort->OUT&=~bLDOBit;
+-		dac_power_on();
+-	}
+-}
+-void s_HJXHAPSetVol(u8 cmd,u8 playtone)
+-{
+-	gHJXHAPVol.step=cmd;
+-	gHJXHAPVol.playtone=playtone;
+-}
+-
+-void s_HJXInit()
+-{
+-	printf("******HJX Init******\n");
+-	//????HAP150
+-	soft_iic_init(HJX_IIC);
+-	extern u8 open_tws_conn;
+-	printf("*********open_tws_conn;%d\n",open_tws_conn);
+-	sys_s_hi_timer_add(NULL,s_HJX10ms , 10);
+-	gHJXHAPInfo.readtimer=sys_s_hi_timer_add(NULL,s_HJXEEPTsk, 10);
+-
+-	//???ß’??32k??rom
+-	int ret=syscfg_read(CFG_USER_WRITE_HAP, &gHJXHAPInfo.writeflag, sizeof(gHJXHAPInfo.writeflag));
+-	if(ret<0)
+-	{
+-		printf("hjx have not write 32k\n");
+-		gHJXHAPInfo.writeflag=0;
+-	}
+-	//pwm ?????
+-	timer_pwm_init(JL_TIMER5, IO_PORTC_04, 10000, 0);
+-}
+-
++#include "HJX_Tsk.h"
++#include "asm/iic_soft.h"
++#include "usb/otg.h"
++#include "app_action.h"
++#include "application/eq_config.h"
++
++
++u8 gHJXOFFFlag=0;
++u8 gBTConFlag=0;
++u8 gBLEConFlag=0;
++u8 gHJXTimer=0;
++u16 gHJXPairTimer=0;
++u8 gHJXModeFlag=0;
++u16 gHJXWriteTimer=0;
++//static u8 T_EEP[EEP_SIZE];
++u8 gHJXClearFlag=1;
++HJX_VAR hjx_var={
++	.bleflag=2,
++};
++HAPVol gHJXHAPVol;
++AutoOff gHJXAutoOff={
++
++	.bleAutoOffCnt=0,
++	.btAutoOffCnt=C_BTOffTime,
++	.step=2,
++};
++BLECMDData gHJXBleData;
++A0DataPacket gHJXA0DataPacket;
++u8 * gHJXEEPPointer=NULL;
++HAPInfo gHJXHAPInfo={0};
++u16 T_AddrTable[4]={0x1CE0,0x3CE0,0x5CE0,0x7CE0};
++u16 T_VolAddrTable[4]={0x35E,0x235E,0x435E,0x635E};
++u16 T_EQUALIZERADDRTable[4]={0x1d45,0x3d45,0x5d45,0x7d45};
++void s_HJXPostMsg(u8 key_value,u8 key_event)
++{
++	struct sys_event e;
++
++    e.type = SYS_KEY_EVENT;
++    e.u.key.init = 1;
++    e.u.key.type = KEY_DRIVER_TYPE_SOFTKEY;//
++    e.u.key.event = key_event;
++    e.u.key.value = key_value;
++    e.u.key.tmr = timer_get_ms();
++	e.arg  = (void *)DEVICE_EVENT_FROM_KEY;
++	// printf("s_HjXPostMsg");
++	sys_event_notify(&e);
++}
++void s_HJXAMPOnOff(u8 cmd)
++{
++	printf("%s :%d\n",__FUNCTION__,cmd);
++//	if(cmd)
++//		PIOG->OUT|=BIT(8);
++//	else
++//		PIOG->OUT&=~BIT(8);
++}
++
++u8 s_HJX_app_get_curr_task()
++{
++	struct application *app = get_current_app();
++	return app->action;
++
++}
++
++
++
++#define PLedPort JL_PORTC
++#define bBLedBit  BIT(4)
++
++#define C_LEDONTIME 20
++#define C_LEDOFFTIME 100
++
++u8 gHJXLedMode=C_BLEDON_1S;
++u8 gHJXLedStep=0;
++u8 gHJXGLedMode=C_GLEDOFF;
++u8 gHJXRLedMode=C_RLEDOFF;
++#define C_LED_MAX_LIGHT 6000
++void s_HJXLedOnOff(u8 cmd)
++{
++//	PLedPort->DIR&=~bBLedBit;
++//	PLedPort->DIE|=bBLedBit;
++//	PLedPort->PU&=~bBLedBit;
++//	PLedPort->PD&=~bBLedBit;
++	switch(cmd)
++	{
++		case 0:
++			//PLedPort->OUT&=~bBLedBit;
++			set_timer_pwm_duty(JL_TIMER5,0);
++			break;
++		case 1:
++			//PLedPort->OUT|=bBLedBit;
++			set_timer_pwm_duty(JL_TIMER5,C_LED_MAX_LIGHT);
++			break;
++		case 2:
++			PLedPort->OUT^=bBLedBit;
++			break;
++	}
++}
++
++
++void s_HJXBLEDTsk()
++{
++	static u16 cnt=0;
++	static u16 step=0;
++	switch(gHJXLedMode)
++	{
++		case C_BLEDFLASH:
++			cnt++;
++			if(cnt<C_LEDONTIME)
++				s_HJXLedOnOff(1);
++			else if(cnt<C_LEDONTIME+C_LEDOFFTIME)
++				s_HJXLedOnOff(0);
++			else
++				cnt=0;
++
++			break;
++		case C_BLEDON:
++
++			s_HJXLedOnOff(1);
++
++
++			break;
++		case C_BLEDON_1S:
++			switch(gHJXLedStep)
++			{
++				case 0:
++					cnt=0;
++					s_HJXLedOnOff(1);
++					gHJXLedStep++;
++					break;
++				case 1:
++					cnt++;
++					if(cnt>=100)
++					{
++						gHJXLedMode=C_BLEDOFF;
++					}
++					break;
++			}
++
++			break;
++		case C_BLEDFASTFLASH_1S:
++			switch(gHJXLedStep)
++			{
++				case 0:
++					cnt=0;
++					gHJXLedStep++;
++					break;
++				case 1:
++					cnt++;
++					if(cnt<C_LEDOFFTIME)
++					{
++						s_HJXLedOnOff(1);
++					}
++					else if(cnt<C_LEDONTIME+C_LEDOFFTIME)
++					{
++						s_HJXLedOnOff(0);
++					}
++					else
++					{
++						if(gBLEConFlag)
++							s_SetLED(C_BLEDON);
++						else
++							s_SetLED(C_BLEDFASTFLASH);
++					}
++					break;
++			}
++
++
++			break;
++		case C_BLEDOFF:
++			s_HJXLedOnOff(0);
++			break;
++		case C_BLEDFASTFLASH:
++
++			cnt++;
++			if(cnt<C_LEDONTIME)
++				s_HJXLedOnOff(1);
++			else if(cnt<C_LEDONTIME+50)
++				s_HJXLedOnOff(0);
++			else
++				cnt=0;
++
++			break;
++		case C_BLEDFLASH_2S:
++			switch(gHJXLedStep)
++			{
++				case 0:
++					s_HJXLedOnOff(1);
++					cnt=0;
++					gHJXLedStep++;
++					break;
++				case 1:
++					cnt++;
++					if(cnt>200)
++						s_HJXLedOnOff(0);
++					break;
++			}
++			break;
++		case C_BLEDFASTFLASH_2S:
++			switch(gHJXLedStep)
++			{
++				case 0:
++					step=0;
++					cnt=0;
++					gHJXLedStep++;
++					break;
++				case 1:
++					step++;
++					if(step>=200)
++						gHJXLedStep++;
++
++					cnt++;
++					if(cnt<50)
++						s_HJXLedOnOff(1);
++					else if(cnt<50+50)
++						s_HJXLedOnOff(0);
++					else
++						cnt=0;
++					break;
++				case 2:
++
++					s_HJXLedOnOff(0);
++					break;
++			}
++			break;
++		case C_BLEDFASTFLASH_3S:
++			switch(gHJXLedStep)
++			{
++				case 0:
++					step=0;
++					cnt=0;
++					gHJXLedStep++;
++					break;
++				case 1:
++					step++;
++					if(step>=300)
++						gHJXLedStep++;
++
++					cnt++;
++					if(cnt<50)
++						s_HJXLedOnOff(1);
++					else if(cnt<50+50)
++						s_HJXLedOnOff(0);
++					else
++						cnt=0;
++					break;
++				case 2:
++
++					s_HJXLedOnOff(0);
++					break;
++			}
++			break;
++		case C_BLDEBREATH:
++			static u16 pwm=0;
++
++			switch(gHJXLedStep)
++			{
++				case 0:
++					pwm+=100;
++					if(pwm>=C_LED_MAX_LIGHT)
++						gHJXLedStep++;
++					break;
++				case 1:
++					if(pwm)
++						pwm-=100;
++					else
++						gHJXLedStep--;
++					break;
++			}
++			set_timer_pwm_duty(JL_TIMER5,pwm);
++			break;
++
++	}
++}
++
++
++void s_SetLED(u8 step)
++{
++	if((step==gHJXLedMode)&&(step!=C_BLEDFASTFLASH_3S))
++		return ;
++	gHJXLedMode=step;
++	gHJXLedStep=0;
++}
++
++u8 s_GetBLedMode()
++{
++	return gHJXLedMode;
++}
++
++
++void	s_SendOffMsg(void)
++{
++	static u8 SendCnt=0;
++	if(gHJXOFFFlag==1)
++	{
++		if(SendCnt<20)
++		{
++			if(SendCnt==0)
++				s_HJXPostMsg(KEY_POWEROFF,KEY_EVENT_LONG);
++			else
++				s_HJXPostMsg(KEY_POWEROFF_HOLD,KEY_EVENT_HOLD);
++			SendCnt++;
++		}
++		//s_HJXPostMsg(HJX_KEY_POWER_OFF,KEY_EVENT_CLICK);
++
++	}
++}
++
++
++
++
++#define HJX_IIC 0
++
++void s_HJXEEPTsk()
++{
++
++
++	static u16 cnt=0,ucnt=0;
++	static u16 addr=0,size=64;
++	u16 ack;
++	switch(gHJXHAPInfo.EEPStep)
++	{
++		case 0:
++
++			break;
++		case 1:
++			soft_iic_cfg[0].delay=50;
++			soft_iic_start(HJX_IIC);
++			ack=soft_iic_tx_byte(HJX_IIC,0xA0);
++			//printf("ack=%d\n",ack);
++			ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
++			//printf("ack=%d\n",ack);
++			ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
++			//printf("ack=%d\n",ack);
++			ack=soft_iic_write_buf(HJX_IIC,&gHJXEEPPointer[addr],64);
++			printf("ack=%d\n",ack);
++			soft_iic_stop(HJX_IIC);
++			if(ack!=64)
++			{
++				break;
++			}
++			addr+=64;
++			cnt++;
++			if(cnt>=(EEP_SIZE/64))
++			{
++				addr=0;
++				cnt=0;
++				gHJXHAPInfo.EEPStep=3;
++				s_HJXHAP150SW(0);
++				s_HJXPostMsg(C_HJX_KEY_VALUE4,KEY_EVENT_CLICK);//send A0 packet
++			}
++			break;
++		case 2:
++			{
++				soft_iic_start(HJX_IIC);
++
++				ack=soft_iic_tx_byte(HJX_IIC,0xA0);
++				printf("ack=%d\n",ack);
++
++				ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
++				printf("ack=%d\n",ack);
++				ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
++				printf("ack=%d\n",ack);
++
++				soft_iic_start(HJX_IIC);
++				ack=soft_iic_tx_byte(HJX_IIC,0xA1);
++				printf("ack=%d\n",ack);
++
++
++
++				ack=soft_iic_read_buf(HJX_IIC,gHJXEEPPointer,32*1024);
++				printf("ack=%d\n",ack);
++
++				soft_iic_stop(HJX_IIC);
++
++			}
++			sys_timer_modify(gHJXHAPInfo.readtimer, 10);
++
++			break;
++		case 3:
++			s_HJXHAP150SW(1);
++			hjx_var.hapinittime=C_HAPInitTime;
++			gHJXHAPInfo.EEPStep=0;
++			break;
++		case 4:
++
++			break;
++		case 5:
++
++			soft_iic_cfg[0].delay=50;
++			soft_iic_start(HJX_IIC);
++			ack=soft_iic_tx_byte(HJX_IIC,0xA0);
++			//printf("ack=%d\n",ack);
++			ack=soft_iic_tx_byte(HJX_IIC,(HAPMODE1_ADDR+addr)>>8);
++			//printf("ack=%d\n",ack);
++			ack=soft_iic_tx_byte(HJX_IIC,(HAPMODE1_ADDR+addr)&0xFF);
++			printf("ack=%d\n",ack);
++
++			ack=soft_iic_write_buf(HJX_IIC,&gHJXEEPPointer[0x2000*gHJXHAPInfo.mode+addr],size);
++			printf("addr=%x\n",addr);
++			printf("ack=%d\n",ack);
++
++			soft_iic_stop(HJX_IIC);
++			if(ack!=size)
++			{
++
++				break;
++			}
++			addr+=64;
++			if(HAPMODE1_SIZE-addr<64)
++			{
++
++				size=HAPMODE1_SIZE-addr;
++
++			}
++			cnt++;
++			u8 times=(HAPMODE1_SIZE%64)?1:0;
++			printf("times:%d\n",times);
++			if(cnt>=((HAPMODE1_SIZE/64)+times))
++			{
++				size=64;
++				addr=0;
++				cnt=0;
++				gHJXHAPInfo.EEPStep=3;
++				s_HJXHAP150SW(0);
++				s_HJXPostMsg(C_HJX_KEY_VALUE4,KEY_EVENT_CLICK);//send A0 packet
++
++			}
++			break;
++		case 6:
++
++
++			break;
++
++	}
++
++
++
++
++}
++
++
++void s_HJXHAPSetVolUpIO(u8 cmd,u8 tone)
++{
++	PVOLUPPort->DIR&=~bVOLUPBit;
++	PVOLUPPort->DIE|=bVOLUPBit;
++	PVOLUPPort->PU&=~bVOLUPBit;
++	PVOLUPPort->PD&=~bVOLUPBit;
++
++	PINT0Port->DIR&=~bINT0Bit;
++	PINT0Port->DIE|=bINT0Bit;
++	PINT0Port->PU&=~bINT0Bit;
++	PINT0Port->PD&=~bINT0Bit;
++
++	if(cmd)
++		PVOLUPPort->OUT|=bVOLUPBit;
++	else
++		PVOLUPPort->OUT&=~bVOLUPBit;
++	if(tone)
++		PINT0Port->OUT|=bINT0Bit;
++	else
++		PINT0Port->OUT&=~bINT0Bit;
++}
++void s_HJXHAPSetVolDownIO(u8 cmd,u8 tone)
++{
++	PVOLDOWNPort->DIR&=~bVOLDOWNBit;
++	PVOLDOWNPort->DIE|=bVOLDOWNBit;
++	PVOLDOWNPort->PU&=~bVOLDOWNBit;
++	PVOLDOWNPort->PD&=~bVOLDOWNBit;
++
++	PINT1Port->DIR&=~bINT1Bit;
++	PINT1Port->DIE|=bINT1Bit;
++	PINT1Port->PU&=~bINT1Bit;
++	PINT1Port->PD&=~bINT1Bit;
++	if(cmd)
++		PVOLDOWNPort->OUT|=bVOLDOWNBit;
++	else
++		PVOLDOWNPort->OUT&=~bVOLDOWNBit;
++	if(tone)
++		PINT1Port->OUT|=bINT1Bit;
++	else
++		PINT1Port->OUT&=~bINT1Bit;
++}
++void s_HJXHAPVOLTsk()
++{
++	switch(gHJXHAPVol.step)
++	{
++		case 0:
++			s_HJXHAPSetVolUpIO(1,1);
++			s_HJXHAPSetVolDownIO(1,1);
++			break;
++		case 1 ... 10:
++
++			s_HJXHAPSetVolUpIO(0,gHJXHAPVol.playtone);
++			// printf("vol up\n");
++			gHJXHAPVol.step++;
++			break;
++
++		case 11:
++			gHJXHAPVol.step=0;
++			break;
++
++
++		case 12 ... 21:
++
++			// printf("vol down\n");
++			s_HJXHAPSetVolDownIO(0,gHJXHAPVol.playtone);
++			gHJXHAPVol.step++;
++			break;
++		case 22:
++			gHJXHAPVol.step=0;
++			break;
++	}
++}
++void s_HJXHAPSetModeIO(u8 cmd)
++{
++	PINT3Port->DIR&=~bINT3Bit;
++	PINT3Port->DIE|=bINT3Bit;
++	PINT3Port->PU&=~bINT3Bit;
++	PINT3Port->PD&=~bINT3Bit;
++
++
++	if(cmd)
++		PINT3Port->OUT|=bINT3Bit;
++	else
++		PINT3Port->OUT&=~bINT3Bit;
++
++}
++void s_HJXHAPModeTsk()
++{
++	switch(gHJXHAPInfo.modestep)
++	{
++		case 0:
++			s_HJXHAPSetModeIO(1);
++
++			break;
++		case 1 ... 10:
++
++			s_HJXHAPSetModeIO(0);
++			printf("mode up\n");
++			gHJXHAPInfo.modestep++;
++			break;
++
++		case 11 ... 411:
++			s_HJXHAPSetModeIO(1);
++			//printf("mode stop\n");
++			gHJXHAPInfo.modestep++;
++
++			break;
++		case 412:
++			printf("modestep=0\n");
++			gHJXHAPInfo.modestep=0;
++			break;
++
++	}
++}
++void s_HJXReadHAP(u8 * buf ,u16 addr,u16 len)
++{
++
++	u16 ack;
++	soft_iic_start(HJX_IIC);
++	ack=soft_iic_tx_byte(HJX_IIC,0xA0);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
++	//printf("ack=%d\n",ack);
++	soft_iic_start(HJX_IIC);
++	ack=soft_iic_tx_byte(HJX_IIC,0xA1);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_read_buf(HJX_IIC,buf,len);
++	printf("ack=%d\n",ack);
++	soft_iic_stop(HJX_IIC);
++}
++void s_HJXWriteHAP(u8 *buf,u16 addr,u8 len)
++{
++
++	u8 ack;
++	soft_iic_start(HJX_IIC);
++	ack=soft_iic_tx_byte(HJX_IIC,0xA0);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_tx_byte(HJX_IIC,addr>>8);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_tx_byte(HJX_IIC,addr&0xFF);
++	//printf("ack=%d\n",ack);
++	ack=soft_iic_write_buf(HJX_IIC,buf,len);
++	printf("ack=%d\n",ack);
++	soft_iic_stop(HJX_IIC);
++	os_time_dly(1);
++
++}
++u32 s_GetEEPSum()
++{
++	if(!gHJXEEPPointer)
++		return 0;
++
++	u32 cs=0;
++	for(u16 i=0;i<EEP_SIZE;i++)
++	{
++		cs+=gHJXEEPPointer[i];
++	}
++	return cs;
++}
++void s_FillA0DataPacket(u8 cmd)
++{
++
++
++	u8 index=0;
++	u8 a0datapacket[67];
++	u16 appcs=s_GetEEPSum();
++	a0datapacket[index++]=A0_HEAD;
++
++	//s_HJXReadHAP(&a0datapacket[index],T_AddrTable[gHJXHAPInfo.mode],4);
++	//index+=4;
++	a0datapacket[index++]=gHJXHAPInfo.mode;
++	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode],1);
++	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+1,1);
++	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+2,1);
++	a0datapacket[index++]=(s_HJXReadCurVol()>>10)&0x1F;
++	a0datapacket[index++]=cmd;
++	a0datapacket[index++]=(s_HJXReadCurVol())&0x1F;
++	//s_HJXReadHAP(&a0datapacket[index++],T_AddrTable[gHJXHAPInfo.mode]+3,1);
++	s_HJXRead70132K(&a0datapacket[index++],A0_NLEVELADDR,1);
++	a0datapacket[index++]=battery_value_to_phone_level()*10;
++	a0datapacket[index++]=appcs>>8;
++	a0datapacket[index++]=appcs&0xFF;
++	printf("appcs:%x",appcs);
++	s_HJXRead70132K(&a0datapacket[index],A0_MATERIALNUMBERADDR,4);
++	index+=4;
++
++	s_HJXRead70132K(&a0datapacket[index],A0_MODELADDR,16);
++	index+=16;
++
++	s_HJXRead70132K(&a0datapacket[index],A0_SERIALNUMBERADDR,16);
++	index+=16;
++
++	s_HJXRead70132K(&a0datapacket[index],T_EQUALIZERADDRTable[gHJXHAPInfo.mode],16);
++	index+=16;
++	a0datapacket[index++]=A0_BT_VERSION;
++
++	s_HJXRead70132K(&a0datapacket[index],A0_HAPVERSIONADDR,2);
++	index+=2;
++
++	s_HJXRead70132K(&a0datapacket[index++],A0_HAPHARDVERSIONADDR,1);
++	a0datapacket[index++]=gHJXHAPInfo.rightleftflag;
++	// È™åÈÖçÊ†áÂøóÂà§Êñ≠ÔºöËØªÂèñ0x3FDDÂíå0x5FDDÔºå‰ªª‰∏ÄÂú∞ÂùÄÊúâÈùû0‰∏îÈùû0xFFÊï∞ÊçÆÂç≥‰∏∫Â∑≤È™åÈÖç
++	u8 fitted = 0;
++	u8 hearing_aid_buf[33];
++	s_HJXRead70132K(hearing_aid_buf, HEARING_AID_ADDR_1, 33);
++	for(u8 i=0; i<33; i++)
++	{
++		if(hearing_aid_buf[i] != 0 && hearing_aid_buf[i] != 0xFF)
++		{
++			fitted = 1;
++			break;
++		}
++	}
++	if(fitted == 0)
++	{
++		s_HJXRead70132K(hearing_aid_buf, HEARING_AID_ADDR_2, 33);
++		for(u8 i=0; i<33; i++)
++		{
++			if(hearing_aid_buf[i] != 0 && hearing_aid_buf[i] != 0xFF)
++			{
++				fitted = 1;
++				break;
++			}
++		}
++	}
++	a0datapacket[index++] = fitted;
++	u8 cs=0;
++	for(u8 i=0;i<index;i++)
++	{
++		cs+=a0datapacket[i];
++	}
++	a0datapacket[index++]=cs;
++	printf_buf(a0datapacket,67);
++	s_HJXBleSend(a0datapacket, index);
++}
++void s_FillF8datapacket(u16 num)
++{
++	printf("s_FillF8datapacket\n");
++	u8 F8datapacket[265];
++	u16 index=0;
++	u16 saddr=256*num,eaddr=(num*256)+255;
++	F8datapacket[index++]=F8_HEAD;
++	u16 appcs=0;
++
++
++	for(u16 i=0;i<gHJXBleData.len-1;i++)
++	{
++		appcs+=gHJXBleData.buf[i];
++	}
++	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
++		F8datapacket[index++]=0;
++	else
++		F8datapacket[index++]=1;
++	F8datapacket[index++]=num;
++	F8datapacket[index++]=saddr>>8;
++	F8datapacket[index++]=saddr&0xFF;
++	F8datapacket[index++]=eaddr>>8;
++	F8datapacket[index++]=eaddr&0xFF;
++//	if(!gHJXHAPInfo.writeflag)
++//		s_HJXReadHAP(&F8datapacket[index],saddr,256);
++//	else
++		s_HJXRead70132K(&F8datapacket[index],saddr,256);
++	memcpy(&gHJXEEPPointer[saddr],&F8datapacket[index],256);
++	printf_buf(&gHJXEEPPointer[saddr],256);
++	index+=256;
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F8datapacket[i];
++	}
++	F8datapacket[index]=cs&0xFF;
++	//printf_buf(F8datapacket,sizeof(F8datapacket));
++	s_HJXBleSend(F8datapacket,sizeof(F8datapacket));
++}
++void s_FillF9datapacket(u16 num)
++{
++	printf("s_FillF9datapacket\n");
++	u8 F9datapacket[4];
++	u16 index=0;
++	u16 appcs=s_GetEEPSum();
++	F9datapacket[index++]=0xF9;
++	F9datapacket[index++]=appcs>>8;
++	F9datapacket[index++]=appcs&0xff;
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F9datapacket[i];
++	}
++	F9datapacket[index]=cs&0xFF;
++	printf_buf(F9datapacket,sizeof(F9datapacket));
++	s_HJXBleSend(F9datapacket,sizeof(F9datapacket));
++}
++void s_FillF6datapacket(u16 saddr,u16 eaddr)
++{
++	printf("s_FillF6datapacket\n");
++	//u8 F6datapacket[264];
++	u8 *F6datapacket=(u8 *)malloc(eaddr-saddr+6);
++	u16 index=0;
++
++	F6datapacket[index++]=F6_HEAD;
++	F6datapacket[index++]=saddr>>8;
++	F6datapacket[index++]=saddr&0xFF;
++	F6datapacket[index++]=eaddr>>8;
++	F6datapacket[index++]=eaddr&0xFF;
++	//s_HJXReadHAP(&F6datapacket[index],saddr,eaddr-saddr);
++	s_HJXRead70132K(&F6datapacket[index],saddr,eaddr-saddr);
++	index+=eaddr-saddr;
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F6datapacket[i];
++	}
++	F6datapacket[index]=cs&0xFF;
++	s_HJXBleSend(F6datapacket,sizeof(F6datapacket));
++	free(F6datapacket);
++
++}
++
++
++void s_FillF1datapacket()
++{
++	printf("s_FillF1datapacket\n");
++	u8 F1datapacket[9];
++	u16 index=0,appcs=0;
++	F1datapacket[index++]=F1_HEAD;
++	for(u16 i=0;i<gHJXBleData.len-1;i++)
++	{
++		appcs+=gHJXBleData.buf[i];
++	}
++	printf("appcs:%x,%x\n",appcs,gHJXBleData.buf[gHJXBleData.len-1]);
++	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
++	{
++		F1datapacket[index++]=0;
++		memcpy(&gHJXEEPPointer[gHJXBleData.buf[2]*256],&gHJXBleData.buf[7],256);
++	}
++	else
++		F1datapacket[index++]=1;
++	F1datapacket[index++]=gHJXBleData.buf[1];
++	F1datapacket[index++]=gHJXBleData.buf[2];
++	F1datapacket[index++]=gHJXBleData.buf[3];
++	F1datapacket[index++]=gHJXBleData.buf[4];
++	F1datapacket[index++]=gHJXBleData.buf[5];
++	F1datapacket[index++]=gHJXBleData.buf[6];
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F1datapacket[i];
++	}
++	F1datapacket[index]=cs&0xFF;
++	printf_buf(F1datapacket,9);
++	s_HJXBleSend(F1datapacket,sizeof(F1datapacket));
++	if(gHJXBleData.buf[2]>=127)
++	{
++
++		int ret=s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++		gHJXHAPInfo.EEPStep=C_HAP_WRITE_32K;
++		gHJXHAPInfo.mode=0;
++		syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
++
++	}
++}
++void s_FillF2datapacket()
++{
++	printf("s_FillF2datapacket\n");
++	u8 F2datapacket[9];
++	u16 index=0,appcs=0;
++	F2datapacket[index++]=F2_HEAD;
++	for(u16 i=0;i<gHJXBleData.len-1;i++)
++	{
++		appcs+=gHJXBleData.buf[i];
++	}
++	if((appcs&0xff)==gHJXBleData.buf[gHJXBleData.len-1])
++	{
++		F2datapacket[index++]=0;
++		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]],&gHJXBleData.buf[7],((gHJXBleData.buf[5]<<8)|gHJXBleData.buf[6])-((gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]));
++
++	}
++	else
++		F2datapacket[index++]=1;
++	F2datapacket[index++]=gHJXBleData.buf[1];
++	F2datapacket[index++]=gHJXBleData.buf[2];
++	F2datapacket[index++]=gHJXBleData.buf[3];
++	F2datapacket[index++]=gHJXBleData.buf[4];
++	F2datapacket[index++]=gHJXBleData.buf[5];
++	F2datapacket[index++]=gHJXBleData.buf[6];
++
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F2datapacket[i];
++	}
++	F2datapacket[index]=cs&0xFF;
++	printf_buf(F2datapacket,sizeof(F2datapacket));
++	s_HJXBleSend(F2datapacket,sizeof(F2datapacket));
++}
++void s_FillF3datapacket()
++{
++	u32 appcs=(gHJXBleData.buf[1]<<24)|(gHJXBleData.buf[2]<<16)|(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4];
++	u32 eepcs=0;
++	for(u16 i=0;i<EEP_SIZE;i++)
++	{
++		eepcs+=gHJXEEPPointer[i];
++	}
++
++	printf("s_FillF3datapacket\n");
++	u8 F3datapacket[3];
++	u16 index=0;
++	F3datapacket[index++]=F3_HEAD;
++	printf("appcs:%x,eepcs:%x\n",appcs,eepcs);
++	if(eepcs==appcs)
++	{
++		printf("cs ok!\n");
++		s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++		F3datapacket[index++]=0;
++		gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
++
++
++	}
++	else
++	{
++		printf("cs err!\n");
++		F3datapacket[index++]=1;
++	}
++	u16 cs=0;
++	for(u16 i=0;i<index;i++)
++	{
++		cs+=F3datapacket[i];
++	}
++	F3datapacket[index]=cs&0xFF;
++	printf_buf(F3datapacket,sizeof(F3datapacket));
++	s_HJXBleSend(F3datapacket,sizeof(F3datapacket));
++
++
++}
++u8 s_HJXStartSetVol(u8 cmd)
++{
++	u8 ret=0;
++	if(cmd<gHJXHAPInfo.vol[gHJXHAPInfo.mode])
++	{
++		gHJXHAPVol.dir=0;
++		gHJXHAPVol.cnt=gHJXHAPInfo.vol[gHJXHAPInfo.mode]-cmd;
++	}
++	else if(cmd==gHJXHAPInfo.vol[gHJXHAPInfo.mode])
++	{
++		ret=1;
++	}
++	else
++	{
++		gHJXHAPVol.dir=1;
++		gHJXHAPVol.cnt=cmd-gHJXHAPInfo.vol[gHJXHAPInfo.mode];
++	}
++	return ret;
++}
++
++int s_HJXWrite70132K(u8 *buf,u32 offset,u16 len)
++{
++
++	FILE *user_fp;     //?????ÔøΩÔøΩ???
++    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ÔøΩÔøΩ
++    extern FILE *user_info_zone_init(struct vfs_attr *attr);
++    user_fp = user_info_zone_init(&attr);
++	user_info_zone_earse_by_addr(user_fp, offset,len);
++    int ret = 0;     //????????????
++    fseek(user_fp,offset , SEEK_CUR);
++	ret = fwrite(user_fp, buf, len);
++    printf("write len = %d\r\n",ret);
++    if(ret != len) {
++        printf("write err\r\n");
++        printf("earse all\r\n");
++        user_info_zone_earse(user_fp, &attr);
++
++
++    }
++
++	fclose(user_fp);
++	return ret;
++}
++void s_HJXRead70132K(u8 *buf,u32 offset,u16 len)
++{
++	FILE *user_fp;     //?????ÔøΩÔøΩ???
++    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ÔøΩÔøΩ
++    extern FILE *user_info_zone_init(struct vfs_attr *attr);
++    user_fp = user_info_zone_init(&attr);
++    int ret = 0;     //????????????
++    fseek(user_fp,offset , SEEK_CUR);
++	ret = fread(user_fp, buf, len);//??32?????
++    if(ret != len) {
++        printf("read err\r\n");
++    }
++	else
++		printf("read ok\r\n");
++
++	fclose(user_fp);
++}
++void s_HJXRead70132K_HAP_BF(u8 *buf,u32 offset,u16 len)
++{
++	FILE *user_fp;     //?????ÔøΩÔøΩ???
++    struct vfs_attr attr = {0}; //user_info????????, sclust: ??????, fsize: ?????ÔøΩÔøΩ
++    extern FILE *user_info_zone_init_HAP_BF(struct vfs_attr *attr);
++    user_fp = user_info_zone_init_HAP_BF(&attr);
++    int ret = 0;     //????????????
++    fseek(user_fp,offset , SEEK_CUR);
++	ret = fread(user_fp, buf, len);//??32?????
++    if(ret != len) {
++        printf("read err\r\n");
++    }
++	else
++		printf("read ok\r\n");
++
++	fclose(user_fp);
++}
++void GetCrC(u8 *pSource, u32 len, u8 *crc)
++{
++u16 crc16 = 0xFFFF;
++u32 i = 0;
++u32 j = 0;
++if(len > 0xFFFFFFFF-1) return;
++while(j < len)
++{
++	crc16 ^= pSource[j];
++	for(i = 0; i < 8; i++)
++	{
++	if(crc16 & 0x01)
++	{
++	crc16 >>= 1;
++	crc16 ^= 0xA001;
++	}
++	else
++	{
++	crc16 >>= 1;
++	}
++	}
++	j++;
++}
++	crc[0] = crc16 % 0x100;
++	crc[1] = crc16 / 0x100;
++}
++void s_FillPCReaddatapacket(int saddr,int len)
++{
++	printf("s_FillPCReaddatapacket %d\n",len);
++
++	//u8 F6datapacket[264];
++	u8 *buf=(u8 *)malloc(len+8);
++	u16 index=0;
++	buf[index++]=gHJXHAPInfo.rightleftflag;
++	buf[index++]=0x03;
++	buf[index++]=len>>24;
++	buf[index++]=(len>>16)&0xff;
++	buf[index++]=(len>>8)&0xff;
++	buf[index++]=(len>>0)&0xff;
++	//s_HJXReadHAP(&buf[index],saddr,eaddr-saddr);
++	s_HJXRead70132K(&buf[index],saddr,len);
++	index+=len;
++	GetCrC(buf,index,&buf[index]);
++	printf_buf(buf, len+8);
++	s_HJXBleSend(buf,len+8);
++	free(buf);
++
++}
++void s_FillPCUpdatedatapacket()
++{
++	printf("s_FillPCUpdatedatapacket\n");
++	u8 buf[9];
++	u16 index=0,appcs=0;
++	buf[index++]=gHJXHAPInfo.rightleftflag;
++	buf[index++]=0x06;
++	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
++	printf("appcs:%x\n",appcs);
++	if(appcs==(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
++	{
++		printf("ok!");
++		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0)],&gHJXBleData.buf[6],1);
++		//s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++	}
++
++
++	buf[index++]=gHJXBleData.buf[2];
++	buf[index++]=gHJXBleData.buf[3];
++	buf[index++]=gHJXBleData.buf[4];
++	buf[index++]=gHJXBleData.buf[5];
++
++	buf[index++]=gHJXBleData.buf[6];
++	GetCrC(buf,sizeof(buf)-2,&buf[index]);
++	printf_buf(buf,sizeof(buf));
++	s_HJXBleSend(buf,sizeof(buf));
++}
++void s_FillPCTrancedatapacket()
++{
++	printf("s_FillPCTrancedatapacket\n");
++	u8 buf[5];
++	u16 index=0,appcs=0;
++	buf[index++]=gHJXHAPInfo.rightleftflag;
++	buf[index++]=0x10;
++	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
++	printf("appcs:%x\n",appcs);
++	if(appcs==(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
++	{
++		printf("ok!");
++		u32 addr=(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0);
++		memcpy(&gHJXEEPPointer[(gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0)],&gHJXBleData.buf[10],(gHJXBleData.buf[6]<<24)|(gHJXBleData.buf[7]<<16)|(gHJXBleData.buf[8]<<8)|(gHJXBleData.buf[9]<<0));
++
++		//s_HJXWriteHAP(&gHJXEEPPointer[addr],addr,64);
++		//if(addr==(EEP_SIZE-64))
++		{
++
++
++		}
++		buf[index++]=0;
++	}
++	else
++		buf[index++]=1;
++
++
++	GetCrC(buf,sizeof(buf)-2,&buf[index]);
++	printf_buf(buf,sizeof(buf));
++	s_HJXBleSend(buf,sizeof(buf));
++}
++void s_FillPCResetdatapacket()
++{
++	printf("s_FillPCTrancedatapacket\n");
++	u8 buf[5];
++	u16 index=0;
++	buf[index++]=gHJXHAPInfo.rightleftflag;
++	buf[index++]=0x04;
++	buf[index++]=0;
++
++
++	GetCrC(buf,index,&buf[index]);
++	printf_buf(buf,sizeof(buf) );
++	s_HJXBleSend(buf,sizeof(buf));
++	//reset hap
++	s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++	//s_HJXHAP150SW(0);
++	//gHJXHAPInfo.EEPStep=3;
++	gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
++}
++//brief: PC????????????
++void s_HJXPCDataDeal()
++{
++	printf("%s\n",__FUNCTION__);
++	u16 appcs;
++	GetCrC(gHJXBleData.buf,gHJXBleData.len-2,&appcs);
++	printf("appcs:%x\n",appcs);
++	if(appcs!=(gHJXBleData.buf[gHJXBleData.len-2]|(gHJXBleData.buf[gHJXBleData.len-1]<<8)))
++		return;
++	switch(gHJXBleData.buf[1])
++	{
++		case C_PC_DATA_READ:
++			s_FillPCReaddatapacket((gHJXBleData.buf[2]<<24)|(gHJXBleData.buf[3]<<16)|(gHJXBleData.buf[4]<<8)|(gHJXBleData.buf[5]<<0),(gHJXBleData.buf[6]<<24)|(gHJXBleData.buf[7]<<16)|(gHJXBleData.buf[8]<<8)|(gHJXBleData.buf[9]<<0));
++			break;
++		case C_PC_DATA_TRANCE:
++			s_FillPCTrancedatapacket();
++			break;
++		case C_PC_DATA_UPDATE:
++
++			s_FillPCUpdatedatapacket();
++			break;
++		case C_PC_DATA_RESET:
++			s_FillPCResetdatapacket();
++			break;
++	}
++}
++//brief: app??????????
++void s_HJXBLEDataDeal()
++{
++	printf("%s\n",__FUNCTION__);
++	switch(gHJXBleData.buf[0])
++	{
++		case C_EEP_DATA_TRANCE:
++
++			s_FillF1datapacket();
++			break;
++		case C_EEP_DATA_CHECK:
++
++			s_FillF3datapacket();
++			break;
++		case C_EEP_DATA_UPDATE:
++
++			s_FillF2datapacket();
++			break;
++		case C_EEP_DATA_READ:
++			s_FillF6datapacket((gHJXBleData.buf[1]<<8)|gHJXBleData.buf[2],(gHJXBleData.buf[3]<<8)|gHJXBleData.buf[4]);
++			break;
++		case C_EEP_DATA_READ_ALL:
++			s_FillF8datapacket(0);
++			break;
++		case C_EEP_DATA_READ_INDEX:
++
++			if(gHJXBleData.buf[2]<=127)
++				s_FillF8datapacket(gHJXBleData.buf[2]);
++			else
++			{
++
++				s_FillF9datapacket(gHJXBleData.buf[2]);
++				printf("hjx  write rom 32k!");
++//				if(!gHJXHAPInfo.writeflag)
++//				{
++//					int ret=s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++//
++//					gHJXHAPInfo.writeflag=1;
++//					syscfg_write(CFG_USER_WRITE_HAP, &gHJXHAPInfo.writeflag, sizeof(gHJXHAPInfo.writeflag));
++//				}
++			}
++			break;
++		case C_HJX_BLE_READ:
++
++
++			gHJXHAPInfo.vol[gHJXHAPInfo.mode]=(s_HJXReadCurVol()>>5)&0x1F;
++			s_FillA0DataPacket(gHJXHAPInfo.vol[gHJXHAPInfo.mode]);
++			break;
++		case C_HJX_BLE_SET_MODE:
++			if(hjx_var.hapinittime||gHJXHAPInfo.EEPStep)
++				break;
++			//gHJXHAPInfo.modecnt=1;
++			gHJXHAPInfo.mode=gHJXBleData.buf[1];
++			printf("gHJXHAPInfo.mode:%d\n",gHJXHAPInfo.mode);
++			syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
++			gHJXHAPInfo.vol[gHJXHAPInfo.mode]=(s_HJXReadCurVol()>>5)&0x1F;
++			s_FillA0DataPacket(gHJXHAPInfo.vol[gHJXHAPInfo.mode]);
++			printf("C_HAP_WRITE_8K\n");
++			gHJXHAPInfo.EEPStep=C_HAP_WRITE_8K;
++			break;
++		case C_HJX_BLE_SET_VOL:
++			u8 vol=gHJXBleData.buf[1];
++			if(vol==255)
++				vol=0;
++			if((vol<((s_HJXReadCurVol())&0x1F)))
++				vol=((s_HJXReadCurVol())&0x1F);//min vol
++			else if((vol>((s_HJXReadCurVol()>>10)&0x1F)))
++				vol=((s_HJXReadCurVol()>>10)&0x1F);//max vol
++			if(s_HJXStartSetVol(vol))
++			{
++				//??????A0??
++				s_FillA0DataPacket(vol);
++			}
++			break;
++		case C_HJX_BLE_RESET:
++			s_HJXRead70132K_HAP_BF(gHJXEEPPointer,0,EEP_SIZE);
++			s_HJXWrite70132K(gHJXEEPPointer,0,EEP_SIZE);
++			//printf_buf(gHJXEEPPointer,EEP_SIZE/4);
++			gHJXHAPInfo.EEPStep=C_HAP_WRITE_32K;
++			gHJXHAPInfo.mode=0;
++			syscfg_write(CFG_USER_MODE, &gHJXHAPInfo.mode,sizeof(gHJXHAPInfo.mode));
++			break;
++	}
++}
++void s_HJXPcAppDeal()
++{
++	switch(gHJXBleData.buf[0])
++	{
++		case 0x01:
++			if(gHJXHAPInfo.rightleftflag==C_LEFT)
++			{
++				s_HJXPCDataDeal();
++			}
++			break;
++		case 0x02:
++			if(gHJXHAPInfo.rightleftflag==C_RIGHT)
++			{
++				s_HJXPCDataDeal();
++			}
++			break;
++		default:
++			s_HJXBLEDataDeal();
++			break;
++	}
++}
++void s_HJXVolSYNCTsk()
++{
++	if(gHJXHAPVol.cnt)
++	{
++		gHJXHAPVol.cnt--;
++		if(gHJXHAPVol.dir)
++		{
++			s_HJXPostMsg(C_HJX_KEY_VALUE0,KEY_EVENT_CLICK);
++		}
++		else
++		{
++			s_HJXPostMsg(C_HJX_KEY_VALUE1,KEY_EVENT_CLICK);
++		}
++	}
++}
++void s_HJXModeSYNCTsk()
++{
++	if(gHJXHAPInfo.modecnt&&(gHJXHAPInfo.modestep==0))
++	{
++		gHJXHAPInfo.modecnt--;
++
++		{
++
++			gHJXHAPInfo.modestep=1;
++		}
++	}
++}
++void s_PoweronSetModeVOL()
++{
++	switch(gHJXHAPInfo.PoweronStep)
++	{
++		case 0:
++			break;
++		case 1:
++			gHJXHAPInfo.modecnt=gHJXHAPInfo.mode;
++			gHJXHAPInfo.PoweronStep++;
++			break;
++		case 2:
++			if(gHJXHAPInfo.modecnt==0)
++				gHJXHAPInfo.PoweronStep++;
++			break;
++		case 3:
++			break;
++//		case 3:
++//			if(gHJXHAPInfo.modestep==0)
++//				gHJXHAPInfo.PoweronStep++;
++//			break;
++//		case 4:
++//			printf("s_HJXStartSetVol\n");
++//			s_HJXStartSetVol(gHJXHAPInfo.vmvol[gHJXHAPInfo.mode]);
++//			gHJXHAPInfo.PoweronStep++;
++//			break;
++	}
++}
++void s_HJXBtBleAutoOff()
++{
++	switch(gHJXAutoOff.step)
++	{
++		case 0:
++			switch(hjx_var.bleflag)
++			{
++				case 0:
++					if(gBTConFlag)
++					{
++
++						gHJXAutoOff.btAutoOffCnt=C_BTOffTime;
++					}
++					else
++					{
++						if(gHJXAutoOff.btAutoOffCnt)
++						{
++
++							gHJXAutoOff.btAutoOffCnt--;
++							if(gHJXAutoOff.btAutoOffCnt==0)
++							{
++								printf("s_HJXBTEnable\n");
++								s_HJXPostMsg(C_HJX_KEY_VALUE3,KEY_EVENT_CLICK);
++								s_SetLED(C_BLDEBREATH);
++								gHJXAutoOff.step++;
++								gHJXAutoOff.btAutoOffCnt=C_BTOffTime;
++							}
++						}
++					}
++					break;
++				case 1:
++					if(gBLEConFlag)
++					{
++
++						gHJXAutoOff.bleAutoOffCnt=C_BLEOffTime;
++					}
++					else
++					{
++						if(gHJXAutoOff.bleAutoOffCnt)
++						{
++							gHJXAutoOff.bleAutoOffCnt--;
++							if(gHJXAutoOff.bleAutoOffCnt==0)
++							{
++								ble_module_enable(0);
++								s_SetLED(C_BLDEBREATH);
++								gHJXAutoOff.step++;
++								gHJXAutoOff.bleAutoOffCnt=C_BLEOffTime;
++							}
++						}
++					}
++					break;
++			}
++
++
++
++			break;
++		case 1:
++			switch(hjx_var.bleflag)
++			{
++				case 0:
++					if(gHJXAutoOff.btAutoOffCnt)
++					{
++						gHJXAutoOff.btAutoOffCnt--;
++						if(gHJXAutoOff.btAutoOffCnt==0)
++						{
++							s_SetLED(C_BLEDOFF);
++							gHJXAutoOff.step++;
++						}
++					}
++					break;
++				case 1:
++					if(gHJXAutoOff.bleAutoOffCnt)
++					{
++						gHJXAutoOff.bleAutoOffCnt--;
++						if(gHJXAutoOff.bleAutoOffCnt==0)
++						{
++							s_SetLED(C_BLEDOFF);
++							gHJXAutoOff.step++;
++						}
++					}
++					break;
++			}
++
++
++			break;
++
++	}
++
++
++
++
++}
++
++void s_HJX10ms()
++{
++	static u8 first=0;
++	static u8 cnt=0,flag,ucnt=0;
++	s_HJXBtBleAutoOff();
++	s_HJXBLEDTsk();
++	s_HJXHAPVOLTsk();
++	//s_HJXHAPModeTsk();
++	//s_PoweronSetModeVOL();
++	cnt++;
++	if(cnt==20)
++	{
++		cnt=0;
++		s_HJXVolSYNCTsk();
++
++		s_HJXPostMsg(C_HJX_KEY_VALUE3, KEY_EVENT_HOLD);
++	}
++
++}
++
++
++
++void s_HJXHAP150SW(u8 cmd)
++{
++	gHJXHAPInfo.onoff=cmd;
++	printf("s_HJXHAP150SW %d\n",cmd);
++	PLDOPort->DIR&=~bLDOBit;
++	PLDOPort->DIE|=bLDOBit;
++	PLDOPort->PU&=~bLDOBit;
++	PLDOPort->PD&=~bLDOBit;
++	if(cmd)
++	{
++		dac_power_off();
++		//PLDOPort->OUT|=bLDOBit;
++
++
++	}
++	else
++	{
++		PLDOPort->OUT&=~bLDOBit;
++		dac_power_on();
++	}
++}
++void s_HJXHAPSetVol(u8 cmd,u8 playtone)
++{
++	gHJXHAPVol.step=cmd;
++	gHJXHAPVol.playtone=playtone;
++}
++
++void s_HJXInit()
++{
++	printf("******HJX Init******\n");
++	//????HAP150
++	soft_iic_init(HJX_IIC);
++	extern u8 open_tws_conn;
++	printf("*********open_tws_conn;%d\n",open_tws_conn);
++	sys_s_hi_timer_add(NULL,s_HJX10ms , 10);
++	gHJXHAPInfo.readtimer=sys_s_hi_timer_add(NULL,s_HJXEEPTsk, 10);
++
++	//???ÔøΩÔøΩ??32k??rom
++	int ret=syscfg_read(CFG_USER_WRITE_HAP, &gHJXHAPInfo.writeflag, sizeof(gHJXHAPInfo.writeflag));
++	if(ret<0)
++	{
++		printf("hjx have not write 32k\n");
++		gHJXHAPInfo.writeflag=0;
++	}
++	//pwm ?????
++	timer_pwm_init(JL_TIMER5, IO_PORTC_04, 10000, 0);
++}
++
+diff --git a/sdk/apps/common/HJX/HJX_Tsk.h b/sdk/apps/common/HJX/HJX_Tsk.h
+index 8ab59b7..620798a 100644
+--- a/sdk/apps/common/HJX/HJX_Tsk.h
++++ b/sdk/apps/common/HJX/HJX_Tsk.h
+@@ -1,328 +1,330 @@
+-#ifndef __HJX_TSK_H__
+-#define __HJX_TSK_H__
+-
+-
+-//#include "HJX_UART.h"
+-#include "system/includes.h"
+-#include "app_config.h"
+-#include "asm/pwm_led.h"
+-#include "tone_player.h"
+-#include "ui_manage.h"
+-#include "app_main.h"
+-#include "app_task.h"
+-#include "asm/charge.h"
+-#include "app_power_manage.h"
+-#include "app_charge.h"
+-#include "user_cfg.h"
+-
+-
+-#include "audio.h"
+-#include "vm.h"
+-#include "key_event_deal.h"
+-#include "HJX_Uart.h"
+-#define	PIOA	JL_PORTA
+-#define	PIOB	JL_PORTB
+-#define	PIOC	JL_PORTC
+-#define	PIOD	JL_PORTD
+-#define PIOG	JL_PORTG
+-extern	u8	gSW;
+-//OFF	=>Ω´IO…Ë÷√≥…∏ﬂ◊Ë,”√”⁄–æ∆¨∂‡∏ˆIO∞Û‘⁄“ª∆µƒ ±∫ÚπÿµÙ∆‰÷–µƒ“ª∏ˆ
+-//OUT	=>Ω´IO…Ë÷√≥… ‰≥ˆ
+-//INPU	=>Ω´IO…Ë÷√≥… ‰»Î…œ¿≠
+-//INPD	=>Ω´IO…Ë÷√≥… ‰»Îœ¬¿≠
+-
+-#define	OffPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD&=~BIT(x);}while(0)
+-#define	OffPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD&=~BIT(x);}while(0)
+-#define	OffPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD&=~BIT(x);}while(0)
+-#define	OffPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD&=~BIT(x);}while(0)
+-//#define	OffDP()	 do{USB_DP_DIR(1);USB_DP_PD(0);USB_DP_PU(0);}while(0)
+-//#define	OffDM()	 do{USB_DM_DIR(1);USB_DM_PD(0);USB_DM_PU(0);}while(0)
+-
+-#define	OUTPA(x) do{PIOA->DIR&=~BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD&=~BIT(x);}while(0)
+-#define	OUTPB(x) do{PIOB->DIR&=~BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD&=~BIT(x);PIOB->HD|=BIT(x);}while(0)
+-#define	OUTPC(x) do{PIOC->DIR&=~BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD&=~BIT(x);}while(0)
+-#define	OUTPG(x) do{PIOG->DIR&=~BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD&=~BIT(x);}while(0)
+-//#define	OUTDP()	 do{USB_DP_DIR(0);USB_DP_PD(0);USB_DP_PU(0);}while(0)
+-//#define	OUTDM()	 do{USB_DM_DIR(0);USB_DM_PD(0);USB_DM_PU(0);}while(0)
+-//#define	OUTPR(x) do{PORTR_PU(x,0);PORTR_PD(x,0);PORTR_DIR(x,0);PORTR_DIE(x,1);PORTR_HD(x,1);}while(0)
+-
+-#define	INPUPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU|=BIT(x);PIOA->PD&=~BIT(x);}while(0)
+-#define	INPUPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU|=BIT(x);PIOB->PD&=~BIT(x);}while(0)
+-#define	INPUPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU|=BIT(x);PIOC->PD&=~BIT(x);}while(0)
+-#define	INPUPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU|=BIT(x);PIOG->PD&=~BIT(x);}while(0)
+-//#define	INPUPR(x) do{PORTR_PU(x,1);PORTR_PD(x,0);PORTR_DIR(x,1);PORTR_DIE(x,1);PORTR_HD(x,1);}while(0)
+-//#define	INPUDP()  do{USB_DP_DIR(1);USB_DP_PD(0);USB_DP_PU(1);}while(0)
+-//#define	INPUDM()  do{USB_DM_DIR(1);USB_DM_PD(0);USB_DM_PU(1);}while(0)
+-
+-#define	INPDPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD|=BIT(x);}while(0)
+-#define	INPDPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD|=BIT(x);}while(0)
+-#define	INPDPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD|=BIT(x);}while(0)
+-#define	INPDPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD|=BIT(x);}while(0)
+-extern void s_HJXTsk();
+-void s_HJXInit();
+-extern u8 gBTInitFlag;
+-enum
+-{
+-	
+-	C_GLEDON,
+-	C_GLEDOFF,
+-	C_BLEDFLASH,
+-	C_BLEDON,
+-	C_BLEDOFF,
+-	C_GLEDFLASH,
+-	C_BLEDFASTFLASH,
+-	C_RLEDFLASH,
+-	C_RLEDOFF,
+-	C_RLEDFLASH_1S,
+-	C_RLEDON,
+-	C_GLEDFASTFLASH,
+-	C_BLEDFLASH_2S,
+-	C_BLEDFASTFLASH_2S,
+-	C_BLEDFASTFLASH_3S,
+-	C_BLEDFASTFLASH_1S,
+-	C_BLDEBREATH,
+-	C_BLEDON_1S,
+-	C_NULL,
+-	
+-};
+-enum
+-{
+-	C_BT,
+-	C_BROADCAST,
+-};
+-
+-void s_SetRLed(u8 step);
+-void s_SetLED(u8 step);
+-void s_SetGLed(u8 step);
+-void s_ReconTimeOut();
+-
+-void s_HJXPairTimeOut();
+-#define C_OffTime 		3*60*100
+-#define C_BTOffTime 	5*60*100//10*60*100
+-#define C_BLEOffTime 	5*60*100
+-#define C_HAPInitTime 	(2*5+3)
+-extern u8 gBTConFlag;
+-extern u8 gHJXVol;
+-
+-extern u8 gHJXChargeFlag;
+-#define C_TL  4000		//??x100?
+-#define C_TH  410		//??x100?
+-extern u8 gNTCStep;
+-#define HJX_CFG_NTC  0
+-#define NTC_DET_CH	 AD_CH_PG7
+-#define NTC_DET_PORT IO_PORTG_07
+-extern u8 gHJXEqMode;
+-extern u8 gHJXVolLock;
+-extern u8 gHJXDelayPlayStep;
+-extern u8 gBigConFlag;
+-extern u8 gHJXDelayPlayFlag;
+-extern u8 gHJXTimer;
+-extern u8 gHJXClearFlag;
+-extern u16 gHJXPairTimer;
+-#define POGOPIN_DET_PORT IO_PORTG_05
+-#define AUX_DET_PORT IO_PORTA_06
+-extern void s_HJXUMute();
+-
+-enum
+-{
+-	HJX_KEY_CLEAR=KEY_REVERB_OPEN+1,
+-    HJX_KEY_CALL_ANSER,
+-    HJX_KEY_MUTE,
+-    HJX_KEY_EQ_SWITCH,
+-    HJX_KEY_UART,
+-    HJX_KEY_SW_UART,
+-    HJX_KEY_CHANGE_TO_PC,
+-    HJX_KEY_POWER_OFF,
+-    HJX_KEY_HAP_SW,
+-    HJX_KEY_HAP_VOL_UP,
+-    HJX_KEY_HAP_VOL_DOWN,
+-    HJX_KEY_BLE_CMD,
+-    HJX_KEY_OFF_DAC,
+-    HJX_KEY_OPEN_DAC,
+-    HJX_KEY_BLE_OPEN,
+-    HJX_KEY_BT_CLOSE,
+-    HJX_KEY_BLE_CLOSE,
+-    HJX_KEY_CHECK_MUSIC,
+-    HJX_KEY_PLAY_BTCON,
+-    HJX_KEY_PLAY_BTDCON,
+-    HJX_KEY_SEND_A0_PACKET,
+-};
+-extern u8 gHJXPogoPinFlag;
+-extern u8 gHJXPCCheckStep;
+-extern u8 s_HJX_app_get_curr_task();
+-extern void s_HJXPowerEventHandler(u8 event);
+-typedef struct _HJX_VAR
+-{
+-	u16 auto_play_tone_timer;
+-	u8 auto_mute;
+-	u8 unmutecnt;
+-	u8 mutecnt;
+-	u8 bleflag;
+-	u8 btplay;
+-	u8 hapinittime;
+-	
+-	
+-}HJX_VAR;
+-extern HJX_VAR hjx_var;
+-#define PLDOPort PIOC
+-#define bLDOBit BIT(5)
+-#define PVOLUPPort PIOB
+-#define bVOLUPBit BIT(8)
+-#define PINT0Port PIOA
+-#define bINT0Bit BIT(5)
+-#define PVOLDOWNPort PIOA
+-#define bVOLDOWNBit BIT(6)
+-#define PINT1Port PIOB
+-#define bINT1Bit BIT(9)
+-#define PINT3Port PIOA
+-#define bINT3Bit BIT(8)
+-enum
+-{
+-	C_HAP_VOL_UP=1,
+-	C_HAP_VOL_DOWN=12
+-};
+-enum
+-{
+-	C_PLAY_TONE,
+-	C_PLAY_NO_TONE,
+-};
+-typedef struct _HAPVol
+-{
+-	u8 step;
+-	u8 playtone;
+-	u8 dir;
+-	u8 cnt;
+-}HAPVol;
+-typedef struct _HAPInfo
+-{
+-	u8 mode;
+-	u8 rightleftflag;
+-	u16 readtimer;
+-	u8 vol[4];
+-	u8 vmvol[4];
+-	u8 EEPStep;
+-	u8 volmin[4];
+-	u8 volmax[4];
+-	u8 volflag;
+-	u16 modestep;
+-	u8 modecnt;
+-	u8 PoweronStep;
+-	u8 writeflag;
+-	u8 onoff;
+-}HAPInfo;
+-typedef struct _BLECMDData
+-{
+-	u8 buf[512];
+-	u16 len;
+-	
+-	
+-}BLECMDData;
+-typedef struct _A0DataPacket
+-{
+-	u8 head;
+-	u8 mode;
+-	u8 minvol;
+-	u8 curvol;
+-	u8 maxvol;
+-	u8 noisereductionlevel;//Ωµ‘Îµ»º∂
+-	u8 bat;//µÁ¡ø
+-	u16 checksum;
+-	u32 materialnumber;//ŒÔ¡œ∫≈
+-	u8 model[16];//–Õ∫≈
+-	u8 serialnumber[16];//–Ú¡–∫≈
+-	u8 equalizer[16];
+-	u8 btversion;
+-	u8 hapversion;
+-	u8 haphardversion;
+-	u8 leftrightflag;
+-	u8 sum;
+-	
+-	
+-}A0DataPacket;//A0 ˝æ›∞¸Ω·ππÃÂ
+-typedef struct _AutoOff
+-{
+-	u16 bleAutoOffCnt;
+-	
+-	u16 btAutoOffCnt;
+-	u8 step;
+-	
+-}AutoOff;
+-enum
+-{
+-	C_HJX_KEY_VALUE0,
+-	C_HJX_KEY_VALUE1,
+-	C_HJX_KEY_VALUE2,
+-	C_HJX_KEY_VALUE3,
+-	C_HJX_KEY_VALUE4,
+-};
+-extern BLECMDData gHJXBleData;
+-//app:√¸¡ÓºØ
+-enum
+-{
+-	C_EEP_DATA_TRANCE=0xF1,		//«ø÷∆ ˝æ›»´¥´ƒ£ Ω 
+-	C_EEP_DATA_UPDATE=0xF2,		//EEP≤ø∑÷ ˝æ›∏¸–¬
+-	C_EEP_DATA_CHECK,			//F2∞¸–£—È∫ÕΩ· ¯±Í÷æŒª
+-	C_EEP_DATA_READ=0xF6,		//∂¡»°EEP÷∏∂®Œª÷√ ˝æ›
+-	C_EEP_DATA_READ_ALL=0xF8,	// ÷ª˙¥””≤º˛∂¡»°ÕÍ’˚µƒ32KBIN
+-	C_EEP_DATA_READ_INDEX=0xFA,
+-	C_HJX_BLE_SET_VOL=0xA2,		//…Ë÷√“Ù¡ø ˝æ›∞¸
+-	C_HJX_BLE_SET_MODE=0xA4,	//…Ë÷√ƒ£ Ω ˝æ›∞¸
+-	C_HJX_BLE_READ=0xA0,		//∂¡»°»´≤ø≤Œ ˝
+-	C_HJX_BLE_RESET=0xAC,
+-};
+-//PC:√¸¡ÓºØ
+-enum
+-{
+-	C_PC_DATA_TRANCE=0x10,//–¥∂‡Ãı
+-	C_PC_DATA_UPDATE=0x06,//–¥µ•∏ˆ
+-	C_PC_DATA_READ=0x03,
+-	C_PC_DATA_RESET=0x04,//reset hap
+-};
+-#define EEP_SIZE	32*1024
+-extern u8 * gHJXEEPPointer;
+-#define A0_BT_VERSION				54
+-#define A0_HEAD					0xCB
+-#define A0_NLEVELADDR 			0x762 //Ωµ‘Îµ»º∂µÿ÷∑
+-#define A0_MATERIALNUMBERADDR 	0x7FFA//ŒÔ¡œ∫≈µÿ÷∑
+-#define A0_MODELADDR 			0x1FF0//–Õ∫≈µÿ÷∑
+-#define A0_SERIALNUMBERADDR 	0x1FE0//–Ú¡–∫≈µÿ÷∑
+-#define A0_EQUALIZERADDR 		0x1DB7//æ˘∫‚∆˜µÿ÷∑
+-#define A0_HAPVERSIONADDR		0x1FDD//»Ìº˛∞Ê±æµÿ÷∑
+-#define A0_HAPHARDVERSIONADDR  	0x5FFE//”≤º˛∞Ê±æµÿ÷∑
+-#define F8_HEAD					0xF8
+-#define F6_HEAD					0xF6
+-#define F3_HEAD					0xF3
+-#define F2_HEAD					0xF2
+-#define F1_HEAD					0xF1
+-#define HAP_VOL_ADDR			0x35E//“Ù¡øµÿ÷∑
+-enum
+-{
+-	
+-	
+-	C_BT_MODE,
+-	C_HAP_MODE,
+-};
+-extern u8 gHJXModeFlag;
+-void s_HJXHAP150SW(u8 cmd);
+-extern HAPInfo gHJXHAPInfo;
+-extern u16 T_AddrTable[4];
+-extern u16 T_VolAddrTable[];
+-extern u8 gBLEConFlag;
+-extern AutoOff gHJXAutoOff;
+-#define HAPMODE1_ADDR 0x0000
+-#define HAPMODE1_SIZE (7392+765)
+-int s_HJXWrite70132K(u8 *buf,u32 offset,u16 len);
+-void s_HJXRead70132K(u8 *buf,u32 offset,u16 len);
+-enum
+-{
+-	C_HAP_WRITE_STOP=0,
+-	C_HAP_WRITE_32K=1,
+-	C_HAP_WRITE_8K=5,
+-};
+-enum
+-{
+-	C_LEFT=1,
+-	C_RIGHT,
+-};
+-void s_HJXBLEDTsk();
+-#endif
++#ifndef __HJX_TSK_H__
++#define __HJX_TSK_H__
++
++
++//#include "HJX_UART.h"
++#include "system/includes.h"
++#include "app_config.h"
++#include "asm/pwm_led.h"
++#include "tone_player.h"
++#include "ui_manage.h"
++#include "app_main.h"
++#include "app_task.h"
++#include "asm/charge.h"
++#include "app_power_manage.h"
++#include "app_charge.h"
++#include "user_cfg.h"
++
++
++#include "audio.h"
++#include "vm.h"
++#include "key_event_deal.h"
++#include "HJX_Uart.h"
++#define	PIOA	JL_PORTA
++#define	PIOB	JL_PORTB
++#define	PIOC	JL_PORTC
++#define	PIOD	JL_PORTD
++#define PIOG	JL_PORTG
++extern	u8	gSW;
++//OFF	=>ÔøΩÔøΩIOÔøΩÔøΩÔøΩ√≥…∏ÔøΩÔøΩÔøΩ,ÔøΩÔøΩÔøΩÔøΩ–æ∆¨ÔøΩÔøΩÔøΩIOÔøΩÔøΩÔøΩÔøΩ“ªÔøΩÔøΩÔøΩ ±ÔøΩÔøΩÿµÔøΩÔøΩÔøΩÔøΩ–µÔøΩ“ªÔøΩÔøΩ
++//OUT	=>ÔøΩÔøΩIOÔøΩÔøΩÔøΩ√≥ÔøΩÔøΩÔøΩÔøΩ
++//INPU	=>ÔøΩÔøΩIOÔøΩÔøΩÔøΩ√≥ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
++//INPD	=>ÔøΩÔøΩIOÔøΩÔøΩÔøΩ√≥ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
++
++#define	OffPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD&=~BIT(x);}while(0)
++#define	OffPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD&=~BIT(x);}while(0)
++#define	OffPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD&=~BIT(x);}while(0)
++#define	OffPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD&=~BIT(x);}while(0)
++//#define	OffDP()	 do{USB_DP_DIR(1);USB_DP_PD(0);USB_DP_PU(0);}while(0)
++//#define	OffDM()	 do{USB_DM_DIR(1);USB_DM_PD(0);USB_DM_PU(0);}while(0)
++
++#define	OUTPA(x) do{PIOA->DIR&=~BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD&=~BIT(x);}while(0)
++#define	OUTPB(x) do{PIOB->DIR&=~BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD&=~BIT(x);PIOB->HD|=BIT(x);}while(0)
++#define	OUTPC(x) do{PIOC->DIR&=~BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD&=~BIT(x);}while(0)
++#define	OUTPG(x) do{PIOG->DIR&=~BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD&=~BIT(x);}while(0)
++//#define	OUTDP()	 do{USB_DP_DIR(0);USB_DP_PD(0);USB_DP_PU(0);}while(0)
++//#define	OUTDM()	 do{USB_DM_DIR(0);USB_DM_PD(0);USB_DM_PU(0);}while(0)
++//#define	OUTPR(x) do{PORTR_PU(x,0);PORTR_PD(x,0);PORTR_DIR(x,0);PORTR_DIE(x,1);PORTR_HD(x,1);}while(0)
++
++#define	INPUPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU|=BIT(x);PIOA->PD&=~BIT(x);}while(0)
++#define	INPUPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU|=BIT(x);PIOB->PD&=~BIT(x);}while(0)
++#define	INPUPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU|=BIT(x);PIOC->PD&=~BIT(x);}while(0)
++#define	INPUPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU|=BIT(x);PIOG->PD&=~BIT(x);}while(0)
++//#define	INPUPR(x) do{PORTR_PU(x,1);PORTR_PD(x,0);PORTR_DIR(x,1);PORTR_DIE(x,1);PORTR_HD(x,1);}while(0)
++//#define	INPUDP()  do{USB_DP_DIR(1);USB_DP_PD(0);USB_DP_PU(1);}while(0)
++//#define	INPUDM()  do{USB_DM_DIR(1);USB_DM_PD(0);USB_DM_PU(1);}while(0)
++
++#define	INPDPA(x) do{PIOA->DIR|=BIT(x);PIOA->DIE|=BIT(x);PIOA->PU&=~BIT(x);PIOA->PD|=BIT(x);}while(0)
++#define	INPDPB(x) do{PIOB->DIR|=BIT(x);PIOB->DIE|=BIT(x);PIOB->PU&=~BIT(x);PIOB->PD|=BIT(x);}while(0)
++#define	INPDPC(x) do{PIOC->DIR|=BIT(x);PIOC->DIE|=BIT(x);PIOC->PU&=~BIT(x);PIOC->PD|=BIT(x);}while(0)
++#define	INPDPG(x) do{PIOG->DIR|=BIT(x);PIOG->DIE|=BIT(x);PIOG->PU&=~BIT(x);PIOG->PD|=BIT(x);}while(0)
++extern void s_HJXTsk();
++void s_HJXInit();
++extern u8 gBTInitFlag;
++enum
++{
++	
++	C_GLEDON,
++	C_GLEDOFF,
++	C_BLEDFLASH,
++	C_BLEDON,
++	C_BLEDOFF,
++	C_GLEDFLASH,
++	C_BLEDFASTFLASH,
++	C_RLEDFLASH,
++	C_RLEDOFF,
++	C_RLEDFLASH_1S,
++	C_RLEDON,
++	C_GLEDFASTFLASH,
++	C_BLEDFLASH_2S,
++	C_BLEDFASTFLASH_2S,
++	C_BLEDFASTFLASH_3S,
++	C_BLEDFASTFLASH_1S,
++	C_BLDEBREATH,
++	C_BLEDON_1S,
++	C_NULL,
++	
++};
++enum
++{
++	C_BT,
++	C_BROADCAST,
++};
++
++void s_SetRLed(u8 step);
++void s_SetLED(u8 step);
++void s_SetGLed(u8 step);
++void s_ReconTimeOut();
++
++void s_HJXPairTimeOut();
++#define C_OffTime 		3*60*100
++#define C_BTOffTime 	5*60*100//10*60*100
++#define C_BLEOffTime 	5*60*100
++#define C_HAPInitTime 	(2*5+3)
++extern u8 gBTConFlag;
++extern u8 gHJXVol;
++
++extern u8 gHJXChargeFlag;
++#define C_TL  4000		//??x100?
++#define C_TH  410		//??x100?
++extern u8 gNTCStep;
++#define HJX_CFG_NTC  0
++#define NTC_DET_CH	 AD_CH_PG7
++#define NTC_DET_PORT IO_PORTG_07
++extern u8 gHJXEqMode;
++extern u8 gHJXVolLock;
++extern u8 gHJXDelayPlayStep;
++extern u8 gBigConFlag;
++extern u8 gHJXDelayPlayFlag;
++extern u8 gHJXTimer;
++extern u8 gHJXClearFlag;
++extern u16 gHJXPairTimer;
++#define POGOPIN_DET_PORT IO_PORTG_05
++#define AUX_DET_PORT IO_PORTA_06
++extern void s_HJXUMute();
++
++enum
++{
++	HJX_KEY_CLEAR=KEY_REVERB_OPEN+1,
++    HJX_KEY_CALL_ANSER,
++    HJX_KEY_MUTE,
++    HJX_KEY_EQ_SWITCH,
++    HJX_KEY_UART,
++    HJX_KEY_SW_UART,
++    HJX_KEY_CHANGE_TO_PC,
++    HJX_KEY_POWER_OFF,
++    HJX_KEY_HAP_SW,
++    HJX_KEY_HAP_VOL_UP,
++    HJX_KEY_HAP_VOL_DOWN,
++    HJX_KEY_BLE_CMD,
++    HJX_KEY_OFF_DAC,
++    HJX_KEY_OPEN_DAC,
++    HJX_KEY_BLE_OPEN,
++    HJX_KEY_BT_CLOSE,
++    HJX_KEY_BLE_CLOSE,
++    HJX_KEY_CHECK_MUSIC,
++    HJX_KEY_PLAY_BTCON,
++    HJX_KEY_PLAY_BTDCON,
++    HJX_KEY_SEND_A0_PACKET,
++};
++extern u8 gHJXPogoPinFlag;
++extern u8 gHJXPCCheckStep;
++extern u8 s_HJX_app_get_curr_task();
++extern void s_HJXPowerEventHandler(u8 event);
++typedef struct _HJX_VAR
++{
++	u16 auto_play_tone_timer;
++	u8 auto_mute;
++	u8 unmutecnt;
++	u8 mutecnt;
++	u8 bleflag;
++	u8 btplay;
++	u8 hapinittime;
++	
++	
++}HJX_VAR;
++extern HJX_VAR hjx_var;
++#define PLDOPort PIOC
++#define bLDOBit BIT(5)
++#define PVOLUPPort PIOB
++#define bVOLUPBit BIT(8)
++#define PINT0Port PIOA
++#define bINT0Bit BIT(5)
++#define PVOLDOWNPort PIOA
++#define bVOLDOWNBit BIT(6)
++#define PINT1Port PIOB
++#define bINT1Bit BIT(9)
++#define PINT3Port PIOA
++#define bINT3Bit BIT(8)
++enum
++{
++	C_HAP_VOL_UP=1,
++	C_HAP_VOL_DOWN=12
++};
++enum
++{
++	C_PLAY_TONE,
++	C_PLAY_NO_TONE,
++};
++typedef struct _HAPVol
++{
++	u8 step;
++	u8 playtone;
++	u8 dir;
++	u8 cnt;
++}HAPVol;
++typedef struct _HAPInfo
++{
++	u8 mode;
++	u8 rightleftflag;
++	u16 readtimer;
++	u8 vol[4];
++	u8 vmvol[4];
++	u8 EEPStep;
++	u8 volmin[4];
++	u8 volmax[4];
++	u8 volflag;
++	u16 modestep;
++	u8 modecnt;
++	u8 PoweronStep;
++	u8 writeflag;
++	u8 onoff;
++}HAPInfo;
++typedef struct _BLECMDData
++{
++	u8 buf[512];
++	u16 len;
++	
++	
++}BLECMDData;
++typedef struct _A0DataPacket
++{
++	u8 head;
++	u8 mode;
++	u8 minvol;
++	u8 curvol;
++	u8 maxvol;
++	u8 noisereductionlevel;//ÔøΩÔøΩÔøΩÔøΩ»ºÔøΩ
++	u8 bat;//ÔøΩÔøΩÔøΩÔøΩ
++	u16 checksum;
++	u32 materialnumber;//ÔøΩÔøΩÔøΩœ∫ÔøΩ
++	u8 model[16];//ÔøΩÕ∫ÔøΩ
++	u8 serialnumber[16];//ÔøΩÔøΩÔøΩ–∫ÔøΩ
++	u8 equalizer[16];
++	u8 btversion;
++	u8 hapversion;
++	u8 haphardversion;
++	u8 leftrightflag;
++	u8 sum;
++	
++	
++}A0DataPacket;//A0ÔøΩÔøΩÔøΩ›∞ÔøΩÔøΩ·ππÔøΩÔøΩ
++typedef struct _AutoOff
++{
++	u16 bleAutoOffCnt;
++	
++	u16 btAutoOffCnt;
++	u8 step;
++	
++}AutoOff;
++enum
++{
++	C_HJX_KEY_VALUE0,
++	C_HJX_KEY_VALUE1,
++	C_HJX_KEY_VALUE2,
++	C_HJX_KEY_VALUE3,
++	C_HJX_KEY_VALUE4,
++};
++extern BLECMDData gHJXBleData;
++//app:ÔøΩÔøΩÔøΩÓºØ
++enum
++{
++	C_EEP_DATA_TRANCE=0xF1,		//«øÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ»´ÔøΩÔøΩƒ£ Ω 
++	C_EEP_DATA_UPDATE=0xF2,		//EEPÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ›∏ÔøΩÔøΩÔøΩ
++	C_EEP_DATA_CHECK,			//F2ÔøΩÔøΩ–£ÔøΩÔøΩÕΩÔøΩÔøΩÔøΩÔøΩÔøΩ÷æŒª
++	C_EEP_DATA_READ=0xF6,		//ÔøΩÔøΩ»°EEP÷∏ÔøΩÔøΩŒªÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
++	C_EEP_DATA_READ_ALL=0xF8,	//ÔøΩ÷ªÔøΩÔøΩÔøΩ”≤ÔøΩÔøΩÔøΩÔøΩ»°ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ32KBIN
++	C_EEP_DATA_READ_INDEX=0xFA,
++	C_HJX_BLE_SET_VOL=0xA2,		//ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ›∞ÔøΩ
++	C_HJX_BLE_SET_MODE=0xA4,	//ÔøΩÔøΩÔøΩÔøΩƒ£ ΩÔøΩÔøΩÔøΩ›∞ÔøΩ
++	C_HJX_BLE_READ=0xA0,		//ÔøΩÔøΩ»°»´ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
++	C_HJX_BLE_RESET=0xAC,
++};
++//PC:ÔøΩÔøΩÔøΩÓºØ
++enum
++{
++	C_PC_DATA_TRANCE=0x10,//–¥ÔøΩÔøΩÔøΩÔøΩ
++	C_PC_DATA_UPDATE=0x06,//–¥ÔøΩÔøΩÔøΩÔøΩ
++	C_PC_DATA_READ=0x03,
++	C_PC_DATA_RESET=0x04,//reset hap
++};
++#define EEP_SIZE	32*1024
++extern u8 * gHJXEEPPointer;
++#define A0_BT_VERSION				54
++#define A0_HEAD					0xCB
++#define A0_NLEVELADDR 			0x762 //ÔøΩÔøΩÔøΩÔøΩ»ºÔøΩÔøΩÔøΩ÷∑
++#define A0_MATERIALNUMBERADDR 	0x7FFA//ÔøΩÔøΩÔøΩœ∫≈µÔøΩ÷∑
++#define A0_MODELADDR 			0x1FF0//ÔøΩÕ∫≈µÔøΩ÷∑
++#define A0_SERIALNUMBERADDR 	0x1FE0//ÔøΩÔøΩÔøΩ–∫≈µÔøΩ÷∑
++#define HEARING_AID_ADDR_1   0x3FDD  // Âê¨ÂäõÂõæ1Âú∞ÂùÄÔºå33Â≠óËäÇ
++#define HEARING_AID_ADDR_2   0x5FDD  // Âê¨ÂäõÂõæ2Âú∞ÂùÄÔºå33Â≠óËäÇ
++#define A0_EQUALIZERADDR 		0x1DB7//ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ÷∑
++#define A0_HAPVERSIONADDR		0x1FDD//ÔøΩÔøΩÔøΩÔøΩÔøΩÊ±æÔøΩÔøΩ÷∑
++#define A0_HAPHARDVERSIONADDR  	0x5FFE//”≤ÔøΩÔøΩÔøΩÊ±æÔøΩÔøΩ÷∑
++#define F8_HEAD					0xF8
++#define F6_HEAD					0xF6
++#define F3_HEAD					0xF3
++#define F2_HEAD					0xF2
++#define F1_HEAD					0xF1
++#define HAP_VOL_ADDR			0x35E//ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ÷∑
++enum
++{
++	
++	
++	C_BT_MODE,
++	C_HAP_MODE,
++};
++extern u8 gHJXModeFlag;
++void s_HJXHAP150SW(u8 cmd);
++extern HAPInfo gHJXHAPInfo;
++extern u16 T_AddrTable[4];
++extern u16 T_VolAddrTable[];
++extern u8 gBLEConFlag;
++extern AutoOff gHJXAutoOff;
++#define HAPMODE1_ADDR 0x0000
++#define HAPMODE1_SIZE (7392+765)
++int s_HJXWrite70132K(u8 *buf,u32 offset,u16 len);
++void s_HJXRead70132K(u8 *buf,u32 offset,u16 len);
++enum
++{
++	C_HAP_WRITE_STOP=0,
++	C_HAP_WRITE_32K=1,
++	C_HAP_WRITE_8K=5,
++};
++enum
++{
++	C_LEFT=1,
++	C_RIGHT,
++};
++void s_HJXBLEDTsk();
++#endif

@@ -1,0 +1,1685 @@
+diff --git a/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c b/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c
+index 6432c1c..8815cf2 100644
+--- a/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c
++++ b/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c
+@@ -1,26 +1,4 @@
+-/*********************************************************************************************
+-    *   Filename        : le_server_module.c
+ 
+-    *   Description     :
+-
+-    *   Author          :
+-
+-    *   Email           : zh-jieli.com
+-
+-    *   Last modifiled  : 2017-01-17 11:14
+-
+-    *   Copyright:(c)JIELI  2011-2016  @ , All Rights Reserved.
+-*********************************************************************************************/
+-
+-// *****************************************************************************
+-/* EXAMPLE_START(le_counter): LE Peripheral - Heartbeat Counter over GATT
+- *
+- * @text All newer operating systems provide GATT Client functionality.
+- * The LE Counter examples demonstrates how to specify a minimal GATT Database
+- * with a custom GATT Service and a custom Characteristic that sends periodic
+- * notifications.
+- */
+-// *****************************************************************************
+ #include "system/app_core.h"
+ #include "system/includes.h"
+ 
+@@ -45,50 +23,34 @@
+ 
+ #if (TCFG_BLE_DEMO_SELECT == DEF_BLE_DEMO_TRANS_DATA)
+ 
+-//TRANS ANCS
+-#define TRANS_ANCS_EN  			  	 1
++#define TRANS_ANCS_EN 1
+ #if TRANS_ANCS_EN
+ #include "btstack/btstack_event.h"
+ #endif
+ 
+-#define TEST_SEND_DATA_RATE          0  //?
+-#define TEST_SEND_HANDLE_VAL         ATT_CHARACTERISTIC_ae02_01_VALUE_HANDLE
+-/* #define TEST_SEND_HANDLE_VAL         ATT_CHARACTERISTIC_ae05_01_VALUE_HANDLE */
+-#define EXT_ADV_MODE_EN              0
++#define TEST_SEND_DATA_RATE 0
++#define TEST_SEND_HANDLE_VAL ATT_CHARACTERISTIC_ae02_01_VALUE_HANDLE
+ 
+-#define TEST_AUDIO_DATA_UPLOAD       0 //??
++#define EXT_ADV_MODE_EN 0
+ 
++#define TEST_AUDIO_DATA_UPLOAD 0
+ 
+ #if LE_DEBUG_PRINT_EN
+ extern void printf_buf(u8 *buf, u32 len);
+-/* #define log_info          printf */
+-#define log_info(x, ...)  printf("[LE_TRANS]" x " ", ## __VA_ARGS__)
+-#define log_info_hexdump  printf_buf
++
++#define log_info(x, ...) printf("[LE_TRANS]" x " ", ##__VA_ARGS__)
++#define log_info_hexdump printf_buf
+ #else
+ #define log_info(...)
+ #define log_info_hexdump(...)
+ #endif
+ 
++#define ATT_LOCAL_MTU_SIZE (512)
+ 
+-/* #define LOG_TAG_CONST       BT_BLE */
+-/* #define LOG_TAG             "[LE_S_DEMO]" */
+-/* #define LOG_ERROR_ENABLE */
+-/* #define LOG_DEBUG_ENABLE */
+-/* #define LOG_INFO_ENABLE */
+-/* #define LOG_DUMP_ENABLE */
+-/* #define LOG_CLI_ENABLE */
+-/* #include "debug.h" */
++#define ATT_SEND_CBUF_SIZE (512)
+ 
+-//------
+-//ATT??,    note: 20 <=need >= MTU
+-#define ATT_LOCAL_MTU_SIZE    (512)                   //
+-//ATTbuffer?,  note: need >= 20,?
+-#define ATT_SEND_CBUF_SIZE        (512)                   //
+-
+-//õRAM
+-#define ATT_RAM_BUFSIZE           (ATT_CTRL_BLOCK_SIZE + ATT_LOCAL_MTU_SIZE + ATT_SEND_CBUF_SIZE)                   //note:
++#define ATT_RAM_BUFSIZE (ATT_CTRL_BLOCK_SIZE + ATT_LOCAL_MTU_SIZE + ATT_SEND_CBUF_SIZE)
+ static u8 att_ram_buffer[ATT_RAM_BUFSIZE] __attribute__((aligned(4)));
+-//---------------
+ 
+ #if TEST_SEND_DATA_RATE
+ static u32 test_data_count;
+@@ -96,69 +58,45 @@ static u32 server_timer_handle = 0;
+ static u8 test_data_start;
+ #endif
+ 
+-/*
+- ??,???? att_server_flow_enable 
+- ??ù ?? att_server_flow_hold ?
+- ?:?????ô?READ/WRITE??
+- :ATT_WRITE_REQUEST = 0x12
+- */
+-#define ATT_DATA_RECIEVT_FLOW           0//??
++#define ATT_DATA_RECIEVT_FLOW 0
+ 
+-//---------------
+-// ? (unit:0.625ms)
+-#define ADV_INTERVAL_MIN          (100*5)
++#define ADV_INTERVAL_MIN (100 * 5)
+ 
+-#define HOLD_LATENCY_CNT_MIN  (3)  //(0~0xffff)
+-#define HOLD_LATENCY_CNT_MAX  (15) //(0~0xffff)
+-#define HOLD_LATENCY_CNT_ALL  (0xffff)
++#define HOLD_LATENCY_CNT_MIN (3)
++#define HOLD_LATENCY_CNT_MAX (15)
++#define HOLD_LATENCY_CNT_ALL (0xffff)
+ 
+ static volatile hci_con_handle_t con_handle;
+ 
+-//
+-/* static const uint8_t sm_min_key_size = 7; */
++static const uint8_t connection_update_enable = 1;
+ 
+-//?
+-//???,0--disable, 1--enable
+-static const uint8_t connection_update_enable = 1; ///0--disable, 1--enable
+-//??index
+-static uint8_t connection_update_cnt = 0; //
++static uint8_t connection_update_cnt = 0;
+ 
+-//
+ static const struct conn_update_param_t connection_param_table[] = {
+-//    {16, 24, 10, 600},//11
+-//    {12, 28, 10, 600},//3.7
+-//    {8,  20, 10, 600},
+-    /* {12, 28, 4, 600},//3.7 */
+-    /* {12, 24, 30, 600},//3.05 */
+-	{6,  10, 0, 100},
++
++    {6, 10, 0, 100},
+     {10, 14, 0, 100},
+     {14, 20, 0, 100},
+ };
+ 
+-//õ?
+-#define CONN_PARAM_TABLE_CNT      (sizeof(connection_param_table)/sizeof(struct conn_update_param_t))
++#define CONN_PARAM_TABLE_CNT (sizeof(connection_param_table) / sizeof(struct conn_update_param_t))
+ 
+ #if (ATT_RAM_BUFSIZE < 64)
+ #error "adv_data & rsp_data buffer error!!!!!!!!!!!!"
+ #endif
+ 
+-//û???app??
+-/* const u8 link_key_data[16] = {0x06, 0x77, 0x5f, 0x87, 0x91, 0x8d, 0xd4, 0x23, 0x00, 0x5d, 0xf1, 0xd8, 0xcf, 0x0c, 0x14, 0x2b}; */
+-#define EIR_TAG_STRING   0xd6, 0x05, 0x08, 0x00, 'J', 'L', 'A', 'I', 'S', 'D','K'
++#define EIR_TAG_STRING 0xd6, 0x05, 0x08, 0x00, 'J', 'L', 'A', 'I', 'S', 'D', 'K'
+ static const char user_tag_string[] = {EIR_TAG_STRING};
+ 
+ static u8 adv_data_len;
+-static u8 adv_data[ADV_RSP_PACKET_MAX];//max is 31
++static u8 adv_data[ADV_RSP_PACKET_MAX];
+ static u8 scan_rsp_data_len;
+-static u8 scan_rsp_data[ADV_RSP_PACKET_MAX];//max is 31
+-
+-/* #define adv_data       &att_ram_buffer[0] */
+-/* #define scan_rsp_data  &att_ram_buffer[32] */
++static u8 scan_rsp_data[ADV_RSP_PACKET_MAX];
+ 
+ static char gap_device_name[BT_NAME_LEN_MAX] = "jl_ble_test";
+-static u8 gap_device_name_len = 0; //??
+-static u8 ble_work_state = 0;      //ble ???
+-static u8 adv_ctrl_en;             //?
++static u8 gap_device_name_len = 0;
++static u8 ble_work_state = 0;
++static u8 adv_ctrl_en;
+ 
+ static u8 test_read_write_buf[4];
+ 
+@@ -171,10 +109,6 @@ static int app_send_user_data_check(u16 len);
+ static int app_send_user_data_do(void *priv, u8 *data, u16 len);
+ static int app_send_user_data(u16 handle, u8 *data, u16 len, u8 handle_type);
+ 
+-// Complete Local Name  ??
+-
+-//------------------------------------------------------
+-//?
+ static void advertisements_setup_init();
+ static int set_adv_enable(void *priv, u32 en);
+ static int get_buffer_vaild_len(void *priv);
+@@ -184,70 +118,77 @@ extern void sys_auto_shut_down_disable(void);
+ extern void sys_auto_shut_down_enable(void);
+ extern u8 get_total_connect_dev(void);
+ 
+-//------------------------------------------------------
+-//NACS
+ #if TRANS_ANCS_EN
+-#define ANCS_SUBEVENT_CLIENT_NOTIFICATION                           0xF1
++#define ANCS_SUBEVENT_CLIENT_NOTIFICATION 0xF1
+ void ancs_client_init(void);
+ void ancs_client_register_callback(btstack_packet_handler_t callback);
+ const char *ancs_client_attribute_name_for_id(int id);
+ void ancs_set_notification_buffer(u8 *buffer, u16 buffer_size);
+ 
+-//ancs info buffer
+-#define ANCS_INFO_BUFFER_SIZE  (1024)
++#define ANCS_INFO_BUFFER_SIZE (1024)
+ static u8 ancs_info_buffer[ANCS_INFO_BUFFER_SIZE];
+ #endif
+ 
+-//------------------------------------------------------
+ #if TEST_AUDIO_DATA_UPLOAD
+ static const u8 test_audio_data_file[1024] = {
+-    1, 2, 3, 4, 5, 6, 7, 8, 9
+-};
++    1, 2, 3, 4, 5, 6, 7, 8, 9};
+ 
+-#define AUDIO_ONE_PACKET_LEN  128
++#define AUDIO_ONE_PACKET_LEN 128
+ static void test_send_audio_data(int init_flag)
+ {
+     static u32 send_pt = 0;
+     static u32 start_flag = 0;
+ 
+-    if (!con_handle) {
++    if (!con_handle)
++    {
+         return;
+     }
+ 
+-    if (init_flag) {
++    if (init_flag)
++    {
+         log_info("audio send init\n");
+         send_pt = 0;
+         start_flag = 1;
+     }
+ 
+-    if (!start_flag) {
++    if (!start_flag)
++    {
+         return;
+     }
+ 
+     u32 file_size = sizeof(test_audio_data_file);
+     u8 *file_ptr = test_audio_data_file;
+ 
+-    if (send_pt >= file_size) {
++    if (send_pt >= file_size)
++    {
+         log_info("audio send Complete\n");
+         start_flag = 0;
+         return;
+     }
+ 
+     u32 send_len = file_size - send_pt;
+-    if (send_len > AUDIO_ONE_PACKET_LEN) {
++    if (send_len > AUDIO_ONE_PACKET_LEN)
++    {
+         send_len = AUDIO_ONE_PACKET_LEN;
+     }
+ 
+-    while (1) {
+-        if (app_send_user_data_check(send_len)) {
++    while (1)
++    {
++        if (app_send_user_data_check(send_len))
++        {
+             log_info("audio send %08x\n", send_pt);
+-            if (app_send_user_data(ATT_CHARACTERISTIC_ae3c_01_VALUE_HANDLE, &file_ptr[send_pt], send_len, ATT_OP_AUTO_READ_CCC)) {
++            if (app_send_user_data(ATT_CHARACTERISTIC_ae3c_01_VALUE_HANDLE, &file_ptr[send_pt], send_len, ATT_OP_AUTO_READ_CCC))
++            {
+                 log_info("audio send fail!\n");
+                 break;
+-            } else {
++            }
++            else
++            {
+                 send_pt += send_len;
+             }
+-        } else {
++        }
++        else
++        {
+             break;
+         }
+     }
+@@ -255,21 +196,23 @@ static void test_send_audio_data(int init_flag)
+ 
+ #endif
+ 
+-
+ static void send_request_connect_parameter(u8 table_index)
+ {
+-    struct conn_update_param_t *param = (void *)&connection_param_table[table_index];//static ram
++    struct conn_update_param_t *param = (void *)&connection_param_table[table_index];
+ 
+     log_info("update_request:-%d-%d-%d-%d-\n", param->interval_min, param->interval_max, param->latency, param->timeout);
+-    if (con_handle) {
++    if (con_handle)
++    {
+         ble_op_conn_param_request(con_handle, param);
+     }
+ }
+ 
+ static void check_connetion_updata_deal(void)
+ {
+-    if (connection_update_enable) {
+-        if (connection_update_cnt < CONN_PARAM_TABLE_CNT) {
++    if (connection_update_enable)
++    {
++        if (connection_update_cnt < CONN_PARAM_TABLE_CNT)
++        {
+             send_request_connect_parameter(connection_update_cnt);
+         }
+     }
+@@ -289,13 +232,14 @@ static void connection_update_complete_success(u8 *packet)
+     log_info("conn_timeout = %d\n", conn_timeout);
+ }
+ 
+-
+ static void set_ble_work_state(ble_state_e state)
+ {
+-    if (state != ble_work_state) {
++    if (state != ble_work_state)
++    {
+         log_info("ble_work_st:%x->%x\n", ble_work_state, state);
+         ble_work_state = state;
+-        if (app_ble_state_callback) {
++        if (app_ble_state_callback)
++        {
+             app_ble_state_callback((void *)channel_priv, state);
+         }
+     }
+@@ -310,9 +254,11 @@ static void cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
+ {
+     sm_just_event_t *event = (void *)packet;
+     u32 tmp32;
+-    switch (packet_type) {
++    switch (packet_type)
++    {
+     case HCI_EVENT_PACKET:
+-        switch (hci_event_packet_get_type(packet)) {
++        switch (hci_event_packet_get_type(packet))
++        {
+         case SM_EVENT_JUST_WORKS_REQUEST:
+             sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
+             log_info("Just Works Confirmed.\n");
+@@ -327,11 +273,11 @@ static void cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
+     }
+ }
+ 
+-
+ #if TEST_SEND_DATA_RATE
+ static void server_timer_handler(void)
+ {
+-    if (!con_handle) {
++    if (!con_handle)
++    {
+         test_data_count = 0;
+         test_data_start = 0;
+         return;
+@@ -339,7 +285,8 @@ static void server_timer_handler(void)
+ 
+     log_info("peer_rssi = %d\n", ble_vendor_get_peer_rssi(con_handle));
+ 
+-    if (test_data_count) {
++    if (test_data_count)
++    {
+         log_info("\n%d bytes send: %d.%02d KB/s \n", test_data_count, test_data_count / 1000, test_data_count % 1000);
+         test_data_count = 0;
+     }
+@@ -347,16 +294,18 @@ static void server_timer_handler(void)
+ 
+ static void server_timer_start(void)
+ {
+-    if (server_timer_handle) {
++    if (server_timer_handle)
++    {
+         return;
+     }
+ 
+-    server_timer_handle  = sys_timer_add(NULL, server_timer_handler, 1000);
++    server_timer_handle = sys_timer_add(NULL, server_timer_handler, 1000);
+ }
+ 
+ static void server_timer_stop(void)
+ {
+-    if (server_timer_handle) {
++    if (server_timer_handle)
++    {
+         sys_timeout_del(server_timer_handle);
+         server_timer_handle = 0;
+     }
+@@ -364,13 +313,16 @@ static void server_timer_stop(void)
+ 
+ void test_data_send_packet(void)
+ {
+-    u32 vaild_len = get_buffer_vaild_len(0);//?buffer?
+-    if (!test_data_start) {
++    u32 vaild_len = get_buffer_vaild_len(0);
++    if (!test_data_start)
++    {
+         return;
+     }
+ 
+-    if (vaild_len) {
+-        if (!app_send_user_data(TEST_SEND_HANDLE_VAL, (void *)&test_data_count, vaild_len, ATT_OP_AUTO_READ_CCC)) {
++    if (vaild_len)
++    {
++        if (!app_send_user_data(TEST_SEND_HANDLE_VAL, (void *)&test_data_count, vaild_len, ATT_OP_AUTO_READ_CCC))
++        {
+             test_data_count += vaild_len;
+         }
+     }
+@@ -378,11 +330,11 @@ void test_data_send_packet(void)
+ }
+ #endif
+ 
+-
+ static void can_send_now_wakeup(void)
+ {
+-    /* putchar('E'); */
+-    if (ble_resume_send_wakeup) {
++
++    if (ble_resume_send_wakeup)
++    {
+         ble_resume_send_wakeup();
+     }
+ 
+@@ -393,17 +345,20 @@ static void can_send_now_wakeup(void)
+ #if TEST_AUDIO_DATA_UPLOAD
+     test_send_audio_data(0);
+ #endif
+-
+ }
+ 
+ static void ble_auto_shut_down_enable(u8 enable)
+ {
+ #if TCFG_AUTO_SHUT_DOWN_TIME
+-    if (enable) {
+-        if (get_total_connect_dev() == 0) {    //?û?
++    if (enable)
++    {
++        if (get_total_connect_dev() == 0)
++        {
+             sys_auto_shut_down_enable();
+         }
+-    } else {
++    }
++    else
++    {
+         sys_auto_shut_down_disable();
+     }
+ #endif
+@@ -418,14 +373,16 @@ const char *const phy_result[] = {
+ 
+ static void set_connection_data_length(u16 tx_octets, u16 tx_time)
+ {
+-    if (con_handle) {
++    if (con_handle)
++    {
+         ble_op_set_data_length(con_handle, tx_octets, tx_time);
+     }
+ }
+ 
+ static void set_connection_data_phy(u8 tx_phy, u8 rx_phy)
+ {
+-    if (0 == con_handle) {
++    if (0 == con_handle)
++    {
+         return;
+     }
+ 
+@@ -443,8 +400,6 @@ static void server_profile_start(u16 con_handle)
+     ble_op_att_send_init(con_handle, att_ram_buffer, ATT_RAM_BUFSIZE, ATT_LOCAL_MTU_SIZE);
+     set_ble_work_state(BLE_ST_CONNECT);
+     ble_auto_shut_down_enable(0);
+-
+-    /* set_connection_data_phy(CONN_SET_CODED_PHY, CONN_SET_CODED_PHY); */
+ }
+ 
+ _WEAK_
+@@ -452,28 +407,20 @@ u8 ble_update_get_ready_jump_flag(void)
+ {
+     return 0;
+ }
+-/*
+- * @section Packet Handler
+- *
+- * @text The packet handler is used to:
+- *        - stop the counter after a disconnect
+- *        - send a notification when the requested ATT_EVENT_CAN_SEND_NOW is received
+- */
+-
+-/* LISTING_START(packetHandler): Packet Handler */
++
+ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+ {
+     int mtu;
+     u32 tmp;
+     u8 status;
+     const char *attribute_name;
+-	STATUS *p_tone = get_tone_config();
+-    switch (packet_type) {
++    STATUS *p_tone = get_tone_config();
++    switch (packet_type)
++    {
+     case HCI_EVENT_PACKET:
+-        switch (hci_event_packet_get_type(packet)) {
++        switch (hci_event_packet_get_type(packet))
++        {
+ 
+-        /* case DAEMON_EVENT_HCI_PACKET_SENT: */
+-        /* break; */
+         case ATT_EVENT_HANDLE_VALUE_INDICATION_COMPLETE:
+             log_info("ATT_EVENT_HANDLE_VALUE_INDICATION_COMPLETE\n");
+         case ATT_EVENT_CAN_SEND_NOW:
+@@ -481,11 +428,13 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+             break;
+ 
+         case HCI_EVENT_LE_META:
+-            switch (hci_event_le_meta_get_subevent_code(packet)) {
++            switch (hci_event_le_meta_get_subevent_code(packet))
++            {
+             case HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE:
+-				
++
+                 status = hci_subevent_le_enhanced_connection_complete_get_status(packet);
+-                if (status) {
++                if (status)
++                {
+                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
+                     set_ble_work_state(BLE_ST_DISCONN);
+                     break;
+@@ -499,24 +448,23 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+                 break;
+ 
+             case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
+-				clk_set("sys", (96 * 1000000L));
+-				printf("HJX malloc EEP\n");
+-				if(!gHJXEEPPointer)
+-				{
+-					gHJXEEPPointer=(u8 *)malloc(EEP_SIZE);
+-					memset(gHJXEEPPointer,0,EEP_SIZE);
+-					//if(gHJXHAPInfo.writeflag)
+-					{
+-						s_HJXRead70132K(gHJXEEPPointer,0,EEP_SIZE);
+-						
+-					}
+-				}
+-				
+-				s_HJXHAP150SW(1);
+-				s_HJXPostMsg(C_HJX_KEY_VALUE3,KEY_EVENT_DOUBLE_CLICK);
+-        		
+-				s_SetLED(C_BLEDON);
+-				gBLEConFlag=1;
++                clk_set("sys", (96 * 1000000L));
++                printf("HJX malloc EEP\n");
++                if (!gHJXEEPPointer)
++                {
++                    gHJXEEPPointer = (u8 *)malloc(EEP_SIZE);
++                    memset(gHJXEEPPointer, 0, EEP_SIZE);
++
++                    {
++                        s_HJXRead70132K(gHJXEEPPointer, 0, EEP_SIZE);
++                    }
++                }
++
++                s_HJXHAP150SW(1);
++                s_HJXPostMsg(C_HJX_KEY_VALUE3, KEY_EVENT_DOUBLE_CLICK);
++
++                s_SetLED(C_BLEDON);
++                gBLEConFlag = 1;
+                 con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
+                 log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", con_handle);
+                 connection_update_complete_success(packet + 8);
+@@ -525,7 +473,7 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+ #if (defined(BT_CONNECTION_VERIFY) && (0 == BT_CONNECTION_VERIFY))
+                 JL_rcsp_auth_reset();
+ #endif
+-                //rcsp_dev_select(RCSP_BLE);
++
+                 rcsp_init();
+ #endif
+                 log_info("ble remote rssi= %d\n", ble_vendor_get_peer_rssi(con_handle));
+@@ -537,7 +485,7 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+ 
+             case HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE:
+                 log_info("APP HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE\n");
+-                /* set_connection_data_phy(CONN_SET_CODED_PHY, CONN_SET_CODED_PHY); */
++
+                 break;
+ 
+             case HCI_SUBEVENT_LE_PHY_UPDATE_COMPLETE:
+@@ -550,14 +498,14 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+ 
+         case HCI_EVENT_DISCONNECTION_COMPLETE:
+             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
+-			printf("HJX malloc free\n");
+-			clk_set("sys", (24 * 1000000L));
+-			s_HJXPostMsg(C_HJX_KEY_VALUE3,KEY_EVENT_TRIPLE_CLICK);
+-			free(gHJXEEPPointer);
+-			if(hjx_var.bleflag==1)
+-				s_SetLED(C_BLEDFASTFLASH);
+-			gHJXEEPPointer=NULL;
+-			gBLEConFlag=0;
++            printf("HJX malloc free\n");
++            clk_set("sys", (24 * 1000000L));
++            s_HJXPostMsg(C_HJX_KEY_VALUE3, KEY_EVENT_TRIPLE_CLICK);
++            free(gHJXEEPPointer);
++            if (hjx_var.bleflag == 1)
++                s_SetLED(C_BLEDFASTFLASH);
++            gHJXEEPPointer = NULL;
++            gBLEConFlag = 0;
+ #if RCSP_BTMATE_EN
+             rcsp_exit();
+ #endif
+@@ -565,7 +513,8 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+             ble_op_att_send_init(con_handle, 0, 0, 0);
+             set_ble_work_state(BLE_ST_DISCONN);
+ 
+-            if (!ble_update_get_ready_jump_flag()) {
++            if (!ble_update_get_ready_jump_flag())
++            {
+                 bt_ble_adv_enable(1);
+             }
+             connection_update_cnt = 0;
+@@ -579,7 +528,7 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+             mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
+             log_info("ATT MTU = %u\n", mtu);
+             ble_op_att_set_send_mtu(mtu);
+-            /* set_connection_data_length(251, 2120); */
++
+             break;
+ 
+         case HCI_EVENT_VENDOR_REMOTE_TEST:
+@@ -589,11 +538,14 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+         case L2CAP_EVENT_CONNECTION_PARAMETER_UPDATE_RESPONSE:
+             tmp = little_endian_read_16(packet, 4);
+             log_info("-update_rsp: %02x\n", tmp);
+-            if (tmp) {
++            if (tmp)
++            {
+                 connection_update_cnt++;
+                 log_info("remoter reject!!!\n");
+                 check_connetion_updata_deal();
+-            } else {
++            }
++            else
++            {
+                 connection_update_cnt = CONN_PARAM_TABLE_CNT;
+             }
+             break;
+@@ -604,14 +556,18 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+ 
+ #if TRANS_ANCS_EN
+         case HCI_EVENT_ANCS_META:
+-            switch (hci_event_ancs_meta_get_subevent_code(packet)) {
++            switch (hci_event_ancs_meta_get_subevent_code(packet))
++            {
+             case ANCS_SUBEVENT_CLIENT_NOTIFICATION:
+                 printf("ANCS_SUBEVENT_CLIENT_NOTIFICATION \n");
+                 attribute_name = ancs_client_attribute_name_for_id(ancs_subevent_client_notification_get_attribute_id(packet));
+-                if (!attribute_name) {
++                if (!attribute_name)
++                {
+                     printf("ancs unknow attribute_id :%d \n", ancs_subevent_client_notification_get_attribute_id(packet));
+                     break;
+-                } else {
++                }
++                else
++                {
+                     u16 attribute_strlen = little_endian_read_16(packet, 7);
+                     u8 *attribute_str = (void *)little_endian_read_32(packet, 9);
+                     printf("Notification: %s - %s \n", attribute_name, attribute_str);
+@@ -623,71 +579,26 @@ static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
+ 
+             break;
+ #endif
+-
+         }
+         break;
+     }
+ }
+ 
+-
+-/* LISTING_END */
+-
+-/*
+- * @section ATT Read
+- *
+- * @text The ATT Server handles all reads to constant data. For dynamic data like the custom characteristic, the registered
+- * att_read_callback is called. To handle long characteristics and long reads, the att_read_callback is first called
+- * with buffer == NULL, to request the total value length. Then it will be called again requesting a chunk of the value.
+- * See Listing attRead.
+- */
+-
+-/* LISTING_START(attRead): ATT Read */
+-
+-// ATT Client Read Callback for Dynamic Data
+-// - if buffer == NULL, don't copy data, just return size of value
+-// - if buffer != NULL, copy data and return number bytes copied
+-// @param offset defines start of attribute value
+ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t att_handle, uint16_t offset, uint8_t *buffer, uint16_t buffer_size)
+ {
+ 
+-    uint16_t  att_value_len = 0;
++    uint16_t att_value_len = 0;
+     uint16_t handle = att_handle;
+ 
+     log_info("read_callback, handle= 0x%04x,buffer= %08x\n", handle, (u32)buffer);
+ 
+-    switch (handle) {
+-//    case ATT_CHARACTERISTIC_2a00_01_VALUE_HANDLE:
+-//        att_value_len = gap_device_name_len;
+-
+-//        if ((offset >= att_value_len) || (offset + buffer_size) > att_value_len) {
+-//            break;
+-//        }
+-
+-//        if (buffer) {
+-//            memcpy(buffer, &gap_device_name[offset], buffer_size);
+-//            att_value_len = buffer_size;
+-//            log_info("\n------read gap_name: %s \n", gap_device_name);
+-//        }
+-//        break;
+-
+-//    case ATT_CHARACTERISTIC_ae10_01_VALUE_HANDLE:
+-//        att_value_len = sizeof(test_read_write_buf);
+-//        if ((offset >= att_value_len) || (offset + buffer_size) > att_value_len) {
+-//            break;
+-//        }
+-
+-//        if (buffer) {
+-//            memcpy(buffer, &test_read_write_buf[offset], buffer_size);
+-//            att_value_len = buffer_size;
+-//        }
+-//        break;
+-
+-   // case ATT_CHARACTERISTIC_ae04_01_CLIENT_CONFIGURATION_HANDLE:
+-//    case ATT_CHARACTERISTIC_ae02_01_CLIENT_CONFIGURATION_HANDLE:
+-    //case ATT_CHARACTERISTIC_ae05_01_CLIENT_CONFIGURATION_HANDLE:
++    switch (handle)
++    {
++
+     case ATT_CHARACTERISTIC_ae3c_01_CLIENT_CONFIGURATION_HANDLE:
+-	case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_CLIENT_CONFIGURATION_HANDLE:
+-        if (buffer) {
++    case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_CLIENT_CONFIGURATION_HANDLE:
++        if (buffer)
++        {
+             buffer[0] = att_get_ccc_config(handle);
+             buffer[1] = 0;
+         }
+@@ -700,32 +611,20 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t a
+ 
+     log_info("att_value_len= %d\n", att_value_len);
+     return att_value_len;
+-
+ }
+ 
+-void s_HJXBleSend(u8 *buffer,u16 buffer_size)
++void s_HJXBleSend(u8 *buffer, u16 buffer_size)
+ {
+-	static u16 cnt=0;
+-	//if (app_send_user_data_check(buffer_size))
+-	{
+-		
+-		app_send_user_data(ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_VALUE_HANDLE, buffer, buffer_size, ATT_OP_AUTO_READ_CCC);
+-		cnt++;
+-		printf("cnt:%d\n",cnt);
+-	}
+-	
+-		
++    static u16 cnt = 0;
++
++    {
++
++        app_send_user_data(ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_VALUE_HANDLE, buffer, buffer_size, ATT_OP_AUTO_READ_CCC);
++        cnt++;
++        printf("cnt:%d\n", cnt);
++    }
+ }
+-/* LISTING_END */
+-/*
+- * @section ATT Write
+- *
+- * @text The only valid ATT write in this example is to the Client Characteristic Configuration, which configures notification
+- * and indication. If the ATT handle matches the client configuration handle, the new configuration value is stored and used
+- * in the heartbeat handler to decide if a new value should be sent. See Listing attWrite.
+- */
+-
+-/* LISTING_START(attWrite): ATT Write */
++
+ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_handle, uint16_t transaction_mode, uint16_t offset, uint8_t *buffer, uint16_t buffer_size)
+ {
+     int result = 0;
+@@ -735,99 +634,46 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
+ 
+     log_info("write_callback, handle= 0x%04x,size = %d\n", handle, buffer_size);
+ 
+-    switch (handle) {
+-
+-//    case ATT_CHARACTERISTIC_2a00_01_VALUE_HANDLE:
+-//        break;
+-
+-//    case ATT_CHARACTERISTIC_ae02_01_CLIENT_CONFIGURATION_HANDLE:
+-//#if TEST_SEND_DATA_RATE
+-//        if (buffer[0]) {
+-//            server_timer_start();
+-//        } else {
+-//            server_timer_stop();
+-//            test_data_start = 0;
+-//        }
+-//#endif
+- //   case ATT_CHARACTERISTIC_ae04_01_CLIENT_CONFIGURATION_HANDLE:
+- //   case ATT_CHARACTERISTIC_ae05_01_CLIENT_CONFIGURATION_HANDLE:
++    switch (handle)
++    {
++
+     case ATT_CHARACTERISTIC_ae3c_01_CLIENT_CONFIGURATION_HANDLE:
+-	case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_CLIENT_CONFIGURATION_HANDLE:
++    case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf74786372_01_CLIENT_CONFIGURATION_HANDLE:
+         set_ble_work_state(BLE_ST_NOTIFY_IDICATE);
+         check_connetion_updata_deal();
+         log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
+         att_set_ccc_config(handle, buffer[0]);
+ 
+ #if TEST_SEND_DATA_RATE
+-        test_data_start = 1;//start
+-        if (buffer[0]) {
++        test_data_start = 1;
++        if (buffer[0])
++        {
+             test_data_send_packet();
+         }
+ #endif
+         break;
+ 
+-//    case ATT_CHARACTERISTIC_ae10_01_VALUE_HANDLE:
+-//        tmp16 = sizeof(test_read_write_buf);
+-//        if ((offset >= tmp16) || (offset + buffer_size) > tmp16) {
+-//            break;
+-//        }
+-//        memcpy(&test_read_write_buf[offset], buffer, buffer_size);
+-//        break;
+-
+-//    case ATT_CHARACTERISTIC_ae01_01_VALUE_HANDLE:
+-//        printf("\n-ae01_rx(%d):", buffer_size);
+-//        printf_buf(buffer, buffer_size);
+-
+-//        if (app_recieve_callback) {
+-//            app_recieve_callback(0, buffer, buffer_size);
+-//        }
+-//        //????;for test
+-//        if (app_send_user_data_check(buffer_size)) {
+-//            app_send_user_data(ATT_CHARACTERISTIC_ae02_01_VALUE_HANDLE, buffer, buffer_size, ATT_OP_AUTO_READ_CCC);
+-//        }
+-
+-//#if TEST_SEND_DATA_RATE
+-//        if ((buffer[0] == 'A') && (buffer[1] == 'F')) {
+-//            test_data_start = 1;//start
+-//        } else if ((buffer[0] == 'A') && (buffer[1] == 'A')) {
+-//            test_data_start = 0;//stop
+-//        }
+-//#endif
+-//        break;
+-	case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf72786372_01_VALUE_HANDLE:
+-		printf("\n-e7baa2e6_rx(%d):", buffer_size);
++    case ATT_CHARACTERISTIC_e7baa2e6_97ad_e697_a0e7_babf72786372_01_VALUE_HANDLE:
++        printf("\n-e7baa2e6_rx(%d):", buffer_size);
+         printf_buf(buffer, buffer_size);
+-		memcpy(gHJXBleData.buf,buffer,buffer_size);
+-		gHJXBleData.len=buffer_size;
+-		static u16 cnt=0;
+-		cnt++;
+-		printf("cnt:%d\n",cnt);
+-		s_HJXPostMsg(C_HJX_KEY_VALUE2,KEY_EVENT_CLICK);
+-		s_SetLED(C_BLEDFASTFLASH_1S);
+-		break;
+-//    case ATT_CHARACTERISTIC_ae03_01_VALUE_HANDLE:
+-//        printf("\n-ae_rx(%d):", buffer_size);
+-//        printf_buf(buffer, buffer_size);
+-
+-//        //????;for test
+-//        if (app_send_user_data_check(buffer_size)) {
+-//            app_send_user_data(ATT_CHARACTERISTIC_ae05_01_VALUE_HANDLE, buffer, buffer_size, ATT_OP_AUTO_READ_CCC);
+-//        }
+-//        break;
++        memcpy(gHJXBleData.buf, buffer, buffer_size);
++        gHJXBleData.len = buffer_size;
++        static u16 cnt = 0;
++        cnt++;
++        printf("cnt:%d\n", cnt);
++        s_HJXPostMsg(C_HJX_KEY_VALUE2, KEY_EVENT_CLICK);
++        s_SetLED(C_BLEDFASTFLASH_1S);
++        break;
+ 
+ #if RCSP_BTMATE_EN
+     case ATT_CHARACTERISTIC_ae02_02_CLIENT_CONFIGURATION_HANDLE:
+ #if (defined(BT_CONNECTION_VERIFY) && (0 == BT_CONNECTION_VERIFY))
+-        JL_rcsp_auth_reset();               //APP???
++        JL_rcsp_auth_reset();
+ #endif
+-        ble_op_latency_skip(con_handle, HOLD_LATENCY_CNT_ALL); //
++        ble_op_latency_skip(con_handle, HOLD_LATENCY_CNT_ALL);
+         set_ble_work_state(BLE_ST_NOTIFY_IDICATE);
+ #endif
+-        /* if ((cur_conn_latency == 0) */
+-        /*     && (connection_update_cnt == CONN_PARAM_TABLE_CNT) */
+-        /*     && (Peripheral_Preferred_Connection_Parameters[0].latency != 0)) { */
+-        /*     connection_update_cnt = 0; */
+-        /* } */
++
+         check_connetion_updata_deal();
+         log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
+         att_set_ccc_config(handle, buffer[0]);
+@@ -835,7 +681,8 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
+ #if RCSP_BTMATE_EN
+     case ATT_CHARACTERISTIC_ae01_02_VALUE_HANDLE:
+         printf("rcsp_read:%x\n", buffer_size);
+-        if (app_recieve_callback) {
++        if (app_recieve_callback)
++        {
+             app_recieve_callback(0, buffer, buffer_size);
+         }
+         break;
+@@ -846,7 +693,8 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
+         printf_buf(buffer, buffer_size);
+ 
+ #if TEST_AUDIO_DATA_UPLOAD
+-        if (0 == memcmp(buffer, "start", 5)) {
++        if (0 == memcmp(buffer, "start", 5))
++        {
+             test_send_audio_data(1);
+         }
+ #endif
+@@ -863,27 +711,30 @@ static int app_send_user_data(u16 handle, u8 *data, u16 len, u8 handle_type)
+ {
+     u32 ret = APP_BLE_NO_ERROR;
+ 
+-    if (!con_handle) {
++    if (!con_handle)
++    {
+         return APP_BLE_OPERATION_ERROR;
+     }
+ 
+-    if (!att_get_ccc_config(handle + 1)) {
++    if (!att_get_ccc_config(handle + 1))
++    {
+         log_info("fail,no write ccc!!!,%04x\n", handle + 1);
+         return APP_BLE_NO_WRITE_CCC;
+     }
+ 
+     ret = ble_op_att_send_data(handle, data, len, handle_type);
+-    if (ret == BLE_BUFFER_FULL) {
++    if (ret == BLE_BUFFER_FULL)
++    {
+         ret = APP_BLE_BUFF_FULL;
+     }
+ 
+-    if (ret) {
++    if (ret)
++    {
+         log_info("app_send_fail:%d !!!!!!\n", ret);
+     }
+     return ret;
+ }
+ 
+-//------------------------------------------------------
+ #if RCSP_BTMATE_EN
+ static u8 tag_in_adv;
+ #endif
+@@ -893,27 +744,25 @@ static int make_set_adv_data(void)
+     u8 offset = 0;
+     u8 *buf = adv_data;
+ 
+-
+ #if DOUBLE_BT_SAME_MAC
+     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x0A, 1);
+ #else
+     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x06, 1);
+ #endif
+ 
+-   // offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_16BIT_SERVICE_UUIDS, 0xAF30, 2);
+-
+ #if RCSP_BTMATE_EN
+-    u8  tag_len = sizeof(user_tag_string);
+-    if (tag_len > ADV_RSP_PACKET_MAX - (offset + 2)) {
++    u8 tag_len = sizeof(user_tag_string);
++    if (tag_len > ADV_RSP_PACKET_MAX - (offset + 2))
++    {
+         tag_in_adv = 0;
+-    } else {
++    }
++    else
++    {
+         offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, (void *)user_tag_string, tag_len);
+         tag_in_adv = 1;
+     }
+ #endif
+ 
+-    // iOS ??????????? scan response??? SN ??? ADV ??? manufacturer data ?
+-    // ???????€ 0x12, 0x13 + SN(7??? from A0_SERIALNUMBERADDR)
+     {
+         u8 sn_data[10] = {0};
+         sn_data[0] = 0x12;
+@@ -922,7 +771,8 @@ static int make_set_adv_data(void)
+         offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, sn_data, 9);
+     }
+ 
+-    if (offset > ADV_RSP_PACKET_MAX) {
++    if (offset > ADV_RSP_PACKET_MAX)
++    {
+         puts("***adv_data overflow!!!!!!\n");
+         return -1;
+     }
+@@ -933,91 +783,61 @@ static int make_set_adv_data(void)
+     return 0;
+ }
+ 
+-// static int make_set_rsp_data(void)
+-// {
+-//     u8 offset = 0;
+-//     u8 *buf = scan_rsp_data;
+-
+-// #if RCSP_BTMATE_EN
+-//     if (!tag_in_adv) {
+-//         u8  tag_len = sizeof(user_tag_string);
+-//         offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, (void *)user_tag_string, tag_len);
+-//     }
+-// #endif
+-
+-//     u8 name_len = gap_device_name_len;
+-//     u8 vaild_len = ADV_RSP_PACKET_MAX - (offset + 2);
+-//     if (name_len > vaild_len) {
+-//         name_len = vaild_len;
+-//     }
+-//     offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, (void *)gap_device_name, name_len);
+-
+-//     if (offset > ADV_RSP_PACKET_MAX) {
+-//         puts("***rsp_data overflow!!!!!!\n");
+-//         return -1;
+-//     }
+-
+-//     log_info("rsp_data(%d):", offset);
+-//     log_info_hexdump(buf, offset);
+-//     scan_rsp_data_len = offset;
+-//     ble_op_set_rsp_data(offset, buf);
+-//     return 0;
+-// }
+-
+ static int make_set_rsp_data(void)
+ {
+     u8 offset = 0;
+     u8 *buf = scan_rsp_data;
+ 
+-    // ?RCSP?ã???
+ #if RCSP_BTMATE_EN
+-    if (!tag_in_adv) {
+-        u8  tag_len = sizeof(user_tag_string);
++    if (!tag_in_adv)
++    {
++        u8 tag_len = sizeof(user_tag_string);
+         offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, (void *)user_tag_string, tag_len);
+     }
+ #endif
+ 
+-    // ?
+     u8 name_len = gap_device_name_len;
+     u8 vaild_len = ADV_RSP_PACKET_MAX - (offset + 2);
+-    if (name_len > vaild_len) {
++    if (name_len > vaild_len)
++    {
+         name_len = vaild_len;
+     }
+     offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, (void *)gap_device_name, name_len);
+ 
+-    // ??"1213"?A0_SERIALNUMBERADDR?16??
+-    u8 custom_data[11] = {0}; // 2??? + 7?? + 2?????
++    u8 custom_data[11] = {0};
+     u8 custom_data_len = 0;
+-    
+-    // ?2??"1213" (0x12, 0x13)
++
+     custom_data[custom_data_len++] = 0x12;
+     custom_data[custom_data_len++] = 0x13;
+-    
+-    // A0_SERIALNUMBERADDR??6???
++
+     s_HJXRead70132K(&custom_data[custom_data_len], A0_SERIALNUMBERADDR, 7);
+     custom_data_len += 7;
+-    
+-    // ?????????2?????
++
+     vaild_len = ADV_RSP_PACKET_MAX - (offset + 2);
+-    if (custom_data_len > vaild_len) {
+-        // ???¼?
++    if (custom_data_len > vaild_len)
++    {
++
+         log_info("Custom data too long for scan response, available:%d, need:%d\n", vaild_len, custom_data_len);
+-        // ???
+-        if (vaild_len > 2) { // ??
++
++        if (vaild_len > 2)
++        {
+             custom_data_len = vaild_len;
+-        } else {
+-            // ????
++        }
++        else
++        {
++
+             log_info("Skip custom data in scan response\n");
+         }
+     }
+-    
+-    if (custom_data_len > 0) {
+-        // ??(0xFF)?
++
++    if (custom_data_len > 0)
++    {
++
+         offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, (void *)custom_data, custom_data_len);
+     }
+ 
+-    // ??
+-    if (offset > ADV_RSP_PACKET_MAX) {
++    if (offset > ADV_RSP_PACKET_MAX)
++    {
+         puts("***rsp_data overflow!!!!!!\n");
+         return -1;
+     }
+@@ -1029,47 +849,46 @@ static int make_set_rsp_data(void)
+     return 0;
+ }
+ 
+-//?
+ static void advertisements_setup_init()
+ {
+     uint8_t adv_type = ADV_IND;
+     uint8_t adv_channel = ADV_CHANNEL_ALL;
+-    int   ret = 0;
++    int ret = 0;
+ 
+     ble_op_set_adv_param(ADV_INTERVAL_MIN, adv_type, adv_channel);
+ 
+     ret |= make_set_adv_data();
+     ret |= make_set_rsp_data();
+ 
+-    if (ret) {
++    if (ret)
++    {
+         puts("advertisements_setup_init fail !!!!!!\n");
+         return;
+     }
+-
+ }
+ 
+-#define PASSKEY_ENTER_ENABLE      0 //passkey???passkey
+-//passkey?passkey
+-//passkey?6????? ?? ??0
++#define PASSKEY_ENTER_ENABLE 0
++
+ static void reset_passkey_cb(u32 *key)
+ {
+ #if 1
+-    u32 newkey = rand32();//?
++    u32 newkey = rand32();
+ 
+     newkey &= 0xfffff;
+-    if (newkey > 999999) {
+-        newkey = newkey - 999999; //?999999
++    if (newkey > 999999)
++    {
++        newkey = newkey - 999999;
+     }
+-    *key = newkey; //???
++    *key = newkey;
+     printf("set new_key= %06u\n", *key);
+ #else
+-    *key = 123456; //for debug
++    *key = 123456;
+ #endif
+ }
+ 
+ void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+ {
+-    //setup SM: Display only
++
+     sm_init();
+     sm_set_io_capabilities(io_type);
+     sm_set_authentication_requirements(auth_req);
+@@ -1077,82 +896,77 @@ void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_siz
+     sm_set_request_security(security_en);
+     sm_event_callback_set(&cbk_sm_packet_handler);
+ 
+-    if (io_type == IO_CAPABILITY_DISPLAY_ONLY) {
++    if (io_type == IO_CAPABILITY_DISPLAY_ONLY)
++    {
+         reset_PK_cb_register(reset_passkey_cb);
+     }
+ }
+ 
+-
+-#define TCFG_BLE_SECURITY_EN 0//
++#define TCFG_BLE_SECURITY_EN 0
+ void ble_profile_init(void)
+ {
+-	static u8 hjx_ble_init_flag=0;
+-	
+-    
+-	
+-	{
+-	printf("ble profile init\n");
+-	printf("le_device_db_init\n");
+-    le_device_db_init();
+-	
++    static u8 hjx_ble_init_flag = 0;
++
++    {
++        printf("ble profile init\n");
++        printf("le_device_db_init\n");
++        le_device_db_init();
++
+ #if TCFG_BLE_BRIDGE_EDR_ENALBE
+-	
+-    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
++
++        ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+ #if !TRANS_ANCS_EN && !SMART_TCFG_BLE_SECURITY_EN
+-    gatt_client_init();
+-    gatt_client_check_ios_config(2);
++        gatt_client_init();
++        gatt_client_check_ios_config(2);
+ #endif
+ #elif PASSKEY_ENTER_ENABLE
+-    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
++        ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
+ #else
+-	printf("ble_sm_setup_init\n");
+-    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
++        printf("ble_sm_setup_init\n");
++        ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
+ #endif
+-	printf("att_server_init\n");
+-    /* setup ATT server */
+-    att_server_init(profile_data, att_read_callback, att_write_callback);
+-	printf("att_server_register_packet_handler\n");
+-    att_server_register_packet_handler(cbk_packet_handler);
+-	
+-    /* gatt_client_register_packet_handler(packet_cbk); */
+-	printf("hci_event_callback_set\n");
+-    // register for HCI events
+-    hci_event_callback_set(&cbk_packet_handler);
+-    /* ble_l2cap_register_packet_handler(packet_cbk); */
+-    /* sm_event_packet_handler_register(packet_cbk); */
+-	printf("le_l2cap_register_packet_handler\n");
+-    le_l2cap_register_packet_handler(&cbk_packet_handler);
++        printf("att_server_init\n");
++
++        att_server_init(profile_data, att_read_callback, att_write_callback);
++        printf("att_server_register_packet_handler\n");
++        att_server_register_packet_handler(cbk_packet_handler);
++
++        printf("hci_event_callback_set\n");
++
++        hci_event_callback_set(&cbk_packet_handler);
++
++        printf("le_l2cap_register_packet_handler\n");
++        le_l2cap_register_packet_handler(&cbk_packet_handler);
+ 
+ #if TRANS_ANCS_EN
+-printf("gatt_client_init\n");
+-    //setup GATT client
+-    gatt_client_init();
+-printf("ancs_client_init\n");
+-    //setup ANCS clent
+-    ancs_client_init();
+-	printf("ancs_set_notification_buffer\n");
+-    ancs_set_notification_buffer(ancs_info_buffer, sizeof(ancs_info_buffer));
+-	printf("ancs_client_register_callback\n");
+-    ancs_client_register_callback(&cbk_packet_handler);
++        printf("gatt_client_init\n");
++
++        gatt_client_init();
++        printf("ancs_client_init\n");
++
++        ancs_client_init();
++        printf("ancs_set_notification_buffer\n");
++        ancs_set_notification_buffer(ancs_info_buffer, sizeof(ancs_info_buffer));
++        printf("ancs_client_register_callback\n");
++        ancs_client_register_callback(&cbk_packet_handler);
+ #endif
+-	printf("ble_vendor_set_default_att_mtu\n");
+-    ble_vendor_set_default_att_mtu(ATT_LOCAL_MTU_SIZE);
+-	
+-	}
++        printf("ble_vendor_set_default_att_mtu\n");
++        ble_vendor_set_default_att_mtu(ATT_LOCAL_MTU_SIZE);
++    }
+ }
+ 
+ #if EXT_ADV_MODE_EN
+ 
++#define EXT_ADV_NAME 'J', 'L', '_', 'E', 'X', 'T', '_', 'A', 'D', 'V'
+ 
+-#define EXT_ADV_NAME                    'J', 'L', '_', 'E', 'X', 'T', '_', 'A', 'D', 'V'
+-/* #define EXT_ADV_NAME                    "JL_EXT_ADV" */
+-#define BYTE_LEN(x...)                  sizeof((u8 []) {x})
+-#define EXT_ADV_DATA                    \
+-    0x02, 0x01, 0x06, \
+-    0x03, 0x02, 0xF0, 0xFF, \
+-    BYTE_LEN(EXT_ADV_NAME) + 1, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME, EXT_ADV_NAME
++#define BYTE_LEN(x...) sizeof((u8[]){x})
++#define EXT_ADV_DATA            \
++    0x02, 0x01, 0x06,           \
++        0x03, 0x02, 0xF0, 0xFF, \
++        BYTE_LEN(EXT_ADV_NAME) + 1, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME, EXT_ADV_NAME
+ 
+-struct ext_advertising_param {
++struct ext_advertising_param
++{
+     u8 Advertising_Handle;
+     u16 Advertising_Event_Properties;
+     u8 Primary_Advertising_Interval_Min[3];
+@@ -1170,7 +984,8 @@ struct ext_advertising_param {
+     u8 Scan_Request_Notification_Enable;
+ } _GNU_PACKED_;
+ 
+-struct ext_advertising_data  {
++struct ext_advertising_data
++{
+     u8 Advertising_Handle;
+     u8 Operation;
+     u8 Fragment_Preference;
+@@ -1178,12 +993,13 @@ struct ext_advertising_data  {
+     u8 Advertising_Data[BYTE_LEN(EXT_ADV_DATA)];
+ } _GNU_PACKED_;
+ 
+-struct ext_advertising_enable {
+-    u8  Enable;
+-    u8  Number_of_Sets;
+-    u8  Advertising_Handle;
++struct ext_advertising_enable
++{
++    u8 Enable;
++    u8 Number_of_Sets;
++    u8 Advertising_Handle;
+     u16 Duration;
+-    u8  Max_Extended_Advertising_Events;
++    u8 Max_Extended_Advertising_Events;
+ } _GNU_PACKED_;
+ 
+ const struct ext_advertising_param ext_adv_param = {
+@@ -1220,28 +1036,34 @@ const struct ext_advertising_enable ext_adv_disable = {
+     .Max_Extended_Advertising_Events = 0,
+ };
+ 
+-#endif /* EXT_ADV_MODE_EN */
++#endif
+ 
+ static int set_adv_enable(void *priv, u32 en)
+ {
+     ble_state_e next_state, cur_state;
+ 
+-    if (!adv_ctrl_en) {
++    if (!adv_ctrl_en)
++    {
+         return APP_BLE_OPERATION_ERROR;
+     }
+ 
+-    if (con_handle) {
++    if (con_handle)
++    {
+         return APP_BLE_OPERATION_ERROR;
+     }
+ 
+-    if (en) {
++    if (en)
++    {
+         next_state = BLE_ST_ADV;
+-    } else {
++    }
++    else
++    {
+         next_state = BLE_ST_IDLE;
+     }
+ 
+-    cur_state =  get_ble_work_state();
+-    switch (cur_state) {
++    cur_state = get_ble_work_state();
++    switch (cur_state)
++    {
+     case BLE_ST_ADV:
+     case BLE_ST_IDLE:
+     case BLE_ST_INIT_OK:
+@@ -1253,50 +1075,60 @@ static int set_adv_enable(void *priv, u32 en)
+         break;
+     }
+ 
+-    if (cur_state == next_state) {
++    if (cur_state == next_state)
++    {
+         return APP_BLE_NO_ERROR;
+     }
+     log_info("adv_en:%d\n", en);
+     set_ble_work_state(next_state);
+ 
+ #if EXT_ADV_MODE_EN
+-    if (en) {
++    if (en)
++    {
+         ble_op_set_ext_adv_param(&ext_adv_param, sizeof(ext_adv_param));
+ 
+         log_info_hexdump(&ext_adv_data, sizeof(ext_adv_data));
+         ble_op_set_ext_adv_data(&ext_adv_data, sizeof(ext_adv_data));
+ 
+         ble_op_set_ext_adv_enable(&ext_adv_enable, sizeof(ext_adv_enable));
+-    } else {
++    }
++    else
++    {
+         ble_op_set_ext_adv_enable(&ext_adv_disable, sizeof(ext_adv_disable));
+     }
+ #else
+-    if (en) {
++    if (en)
++    {
+         advertisements_setup_init();
+     }
+     ble_op_adv_enable(en);
+-#endif /* EXT_ADV_MODE_EN */
++#endif
+ 
+     return APP_BLE_NO_ERROR;
+ }
+ 
+ static int ble_disconnect(void *priv)
+ {
+-    if (con_handle) {
+-        if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
++    if (con_handle)
++    {
++        if (BLE_ST_SEND_DISCONN != get_ble_work_state())
++        {
+             log_info(">>>ble send disconnect\n");
+             set_ble_work_state(BLE_ST_SEND_DISCONN);
+             ble_op_disconnect(con_handle);
+-        } else {
++        }
++        else
++        {
+             log_info(">>>ble wait disconnect...\n");
+         }
+         return APP_BLE_NO_ERROR;
+-    } else {
++    }
++    else
++    {
+         return APP_BLE_OPERATION_ERROR;
+     }
+ }
+ 
+-
+ static int get_buffer_vaild_len(void *priv)
+ {
+     u32 vaild_len = 0;
+@@ -1307,10 +1139,13 @@ static int get_buffer_vaild_len(void *priv)
+ static int app_send_user_data_do(void *priv, u8 *data, u16 len)
+ {
+ #if PRINT_DMA_DATA_EN
+-    if (len < 128) {
++    if (len < 128)
++    {
+         log_info("-le_tx(%d):");
+         log_info_hexdump(data, len);
+-    } else {
++    }
++    else
++    {
+         putchar('L');
+     }
+ #endif
+@@ -1320,13 +1155,13 @@ static int app_send_user_data_do(void *priv, u8 *data, u16 len)
+ static int app_send_user_data_check(u16 len)
+ {
+     u32 buf_space = get_buffer_vaild_len(0);
+-    if (len <= buf_space) {
++    if (len <= buf_space)
++    {
+         return 1;
+     }
+     return 0;
+ }
+ 
+-
+ static int regiest_wakeup_send(void *priv, void *cbk)
+ {
+     ble_resume_send_wakeup = cbk;
+@@ -1347,15 +1182,10 @@ static int regiest_state_cbk(void *priv, void *cbk)
+     return APP_BLE_NO_ERROR;
+ }
+ 
+-//------------------------------------------------------------------------------
+-//------------------------------------------------------------------------------
+-//------------------------------------------------------------------------------
+-//------------------------------------------------------------------------------
+-
+-
+ u8 *ble_get_scan_rsp_ptr(u16 *len)
+ {
+-    if (len) {
++    if (len)
++    {
+         *len = scan_rsp_data_len;
+     }
+     return scan_rsp_data;
+@@ -1363,7 +1193,8 @@ u8 *ble_get_scan_rsp_ptr(u16 *len)
+ 
+ u8 *ble_get_adv_data_ptr(u16 *len)
+ {
+-    if (len) {
++    if (len)
++    {
+         *len = adv_data_len;
+     }
+     return adv_data;
+@@ -1375,7 +1206,6 @@ u8 *ble_get_gatt_profile_data(u16 *len)
+     return (u8 *)profile_data;
+ }
+ 
+-
+ void bt_ble_adv_enable(u8 enable)
+ {
+     set_adv_enable(0, enable);
+@@ -1389,27 +1219,32 @@ u16 bt_ble_is_connected(void)
+ void ble_module_enable(u8 en)
+ {
+     log_info("mode_en:%d\n", en);
+-    if (en) {
++    if (en)
++    {
+         adv_ctrl_en = 1;
+         bt_ble_adv_enable(1);
+-    } else {
+-        if (con_handle) {
++    }
++    else
++    {
++        if (con_handle)
++        {
+             adv_ctrl_en = 0;
+             ble_disconnect(NULL);
+-        } else {
++        }
++        else
++        {
+             bt_ble_adv_enable(0);
+             adv_ctrl_en = 0;
+         }
+     }
+ }
+ 
+-
+-//? EN: 1-?? or 0-
+ int ble_trans_flow_enable(u8 en)
+ {
+     int ret = -1;
+ #if ATT_DATA_RECIEVT_FLOW
+-    if (con_handle) {
++    if (con_handle)
++    {
+         att_server_flow_hold(con_handle, en);
+         ret = 0;
+     }
+@@ -1418,11 +1253,11 @@ int ble_trans_flow_enable(u8 en)
+     return ret;
+ }
+ 
+-//for test
+ static void timer_trans_flow_test(void)
+ {
+     static u8 sw = 0;
+-    if (con_handle) {
++    if (con_handle)
++    {
+         sw = !sw;
+         ble_trans_flow_enable(sw);
+     }
+@@ -1442,40 +1277,39 @@ void bt_ble_init(void)
+     u8 ext_name_len = sizeof(ble_ext_name) - 1;
+ #endif
+ 
+-    //name_p = "Heacad-R";//bt_get_local_name();
+-    if(bt_tws_get_local_channel() == 'L')
++    if (bt_tws_get_local_channel() == 'L')
++    {
++        name_p = "Heacad-L";
++        gHJXHAPInfo.rightleftflag = C_LEFT;
++    }
++    else
+     {
+-		name_p = "Heacad-L";
+-		gHJXHAPInfo.rightleftflag=C_LEFT;
++        name_p = "Heacad-R";
++        gHJXHAPInfo.rightleftflag = C_RIGHT;
+     }
+-	else
+-	{
+-		name_p = "Heacad-R";
+-		gHJXHAPInfo.rightleftflag=C_RIGHT;
+-	}
+     gap_device_name_len = strlen(name_p);
+-    if (gap_device_name_len > BT_NAME_LEN_MAX - ext_name_len) {
++    if (gap_device_name_len > BT_NAME_LEN_MAX - ext_name_len)
++    {
+         gap_device_name_len = BT_NAME_LEN_MAX - ext_name_len;
+     }
+ 
+     memcpy(gap_device_name, name_p, gap_device_name_len);
+ 
+ #if DOUBLE_BT_SAME_NAME == 0
+-    //??
++
+     memcpy(&gap_device_name[gap_device_name_len], "(BLE)", ext_name_len);
+     gap_device_name_len += ext_name_len;
+ #endif
+-    gap_device_name[gap_device_name_len] = 0;//
++    gap_device_name[gap_device_name_len] = 0;
+     log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
+ 
+ #if ATT_DATA_RECIEVT_FLOW
+     log_info("att_server_flow_enable\n");
+     att_server_flow_enable(1);
+-    /* sys_timer_add(0, timer_trans_flow_test, 3000); */
++
+ #endif
+ 
+     set_ble_work_state(BLE_ST_INIT_OK);
+-    //ble_module_enable(1);
+ 
+ #if TEST_SEND_DATA_RATE
+     server_timer_start();
+@@ -1491,10 +1325,8 @@ void bt_ble_exit(void)
+ #if TEST_SEND_DATA_RATE
+     server_timer_stop();
+ #endif
+-
+ }
+ 
+-
+ void ble_app_disconnect(void)
+ {
+     ble_disconnect(NULL);
+@@ -1505,10 +1337,13 @@ static int rcsp_send_user_data_do(void *priv, u8 *data, u16 len)
+ {
+     log_info("rcsp_tx:%x\n", len);
+ #if PRINT_DMA_DATA_EN
+-    if (len < 128) {
++    if (len < 128)
++    {
+         log_info("-dma_tx(%d):");
+         log_info_hexdump(data, len);
+-    } else {
++    }
++    else
++    {
+         putchar('L');
+     }
+ #endif
+@@ -1564,9 +1399,6 @@ void hangup_ans_call_handle(u8 en)
+     put_buf(ble_hangup, 6);
+     u8 ble_hangup_size = 6;
+     ble_op_att_send_data(control_point_handle, (void *)&ble_hangup, ble_hangup_size, ATT_OP_WRITE);
+-
+ }
+ #endif
+-#endif
+-
+-
++#endif
+\ No newline at end of file

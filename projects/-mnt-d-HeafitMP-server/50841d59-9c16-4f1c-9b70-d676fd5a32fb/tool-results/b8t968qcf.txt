@@ -1,0 +1,662 @@
+diff --git a/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSession.java b/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSession.java
+index bdd010c..e4e9787 100644
+--- a/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSession.java
++++ b/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSession.java
+@@ -18,11 +18,4 @@ public class FittingSession {
+     private String status;
+     private LocalDateTime expireTime;
+     private LocalDateTime createdAt;
+-
+-    // 新增字段
+-    private String materialNo;  // 设备物料号
+-    private String sn;          // 设备序列号
+-    private String ear;         // 耳侧：left/right
+-    private String model;       // 设备型号
+-    private byte[] audiogram;   // 听力图数据（66字节 = 33字节*2，左耳2个地址+右耳2个地址）
+ }
+\ No newline at end of file
+diff --git a/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java b/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java
+new file mode 100644
+index 0000000..fb4c75c
+--- /dev/null
++++ b/HeafitMP-common/src/main/java/com/heafitmp/common/entity/FittingSessionDevice.java
+@@ -0,0 +1,24 @@
++package com.heafitmp.common.entity;
++
++import com.baomidou.mybatisplus.annotation.IdType;
++import com.baomidou.mybatisplus.annotation.TableId;
++import com.baomidou.mybatisplus.annotation.TableName;
++import lombok.Data;
++import java.time.LocalDateTime;
++
++@Data
++@TableName("fitting_session_devices")
++public class FittingSessionDevice {
++    @TableId(type = IdType.AUTO)
++    private Long id;
++    private String sessionId;      // 外键关联 FittingSession
++    private String ear;           // left / right
++    private String sn;            // 序列号（原始绑定值，烧录验证用）
++    private String materialNo;     // 物料号（原始绑定值，烧录验证用）
++    private String model;         // 型号
++    private byte[] audiogram;     // 听力图数据(66字节)
++    private LocalDateTime createdAt;
++    // 当前同步数据（心跳更新，验配师查看用，不参与烧录验证）
++    private String currentSn;
++    private String currentMaterialNo;
++}
+diff --git a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/FittingServiceApplication.java b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/FittingServiceApplication.java
+index c85d53f..5505649 100644
+--- a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/FittingServiceApplication.java
++++ b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/FittingServiceApplication.java
+@@ -2,8 +2,10 @@ package com.heafitmp.fitting;
+ 
+ import org.springframework.boot.SpringApplication;
+ import org.springframework.boot.autoconfigure.SpringBootApplication;
++import org.springframework.scheduling.annotation.EnableScheduling;
+ 
+ @SpringBootApplication
++@EnableScheduling
+ public class FittingServiceApplication {
+     public static void main(String[] args) {
+         SpringApplication.run(FittingServiceApplication.class, args);
+diff --git a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java
+index fcd2182..59a3222 100644
+--- a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java
++++ b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/controller/FittingController.java
+@@ -3,8 +3,14 @@ package com.heafitmp.fitting.controller;
+ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+ import com.heafitmp.common.dto.ApiResponse;
+ import com.heafitmp.common.entity.FittingSession;
++import com.heafitmp.common.entity.FittingSessionDevice;
++import com.heafitmp.fitting.mapper.FittingSessionDeviceMapper;
+ import com.heafitmp.fitting.mapper.FittingSessionMapper;
+ import com.heafitmp.fitting.websocket.FittingWebSocketHandler;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.ConcurrentHashMap;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.web.bind.annotation.*;
+ import org.springframework.web.multipart.MultipartFile;
+@@ -17,7 +23,7 @@ import java.util.Base64;
+ @RequestMapping("/fitting")
+ public class FittingController {
+ 
+-    private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
++    private static final String CODE_CHARS = "0123456789";
+     private static final java.util.Random random = new java.util.Random();
+ 
+     // 模拟存储（生产环境应使用数据库）
+@@ -26,12 +32,18 @@ public class FittingController {
+     // 文件存储: fileId -> byte[]
+     private static final Map<String, byte[]> fileStorage = new HashMap<>();
+ 
++    // 操作状态管理：sessionId -> 操作类型和目标耳朵（用于操作串行化）
++    private static final Map<String, Map<String, Object>> operatingSessions = new ConcurrentHashMap<>();
++
+     @Autowired
+     private FittingWebSocketHandler webSocketHandler;
+ 
+     @Autowired
+     private FittingSessionMapper fittingSessionMapper;
+ 
++    @Autowired
++    private FittingSessionDeviceMapper fittingSessionDeviceMapper;
++
+     @PostMapping("/code")
+     public ApiResponse<Map<String, Object>> generateCode(@RequestBody Map<String, Object> params) {
+         // 生成6位字母数字验配码（服务器端生成确保唯一性）
+@@ -54,49 +66,59 @@ public class FittingController {
+             return ApiResponse.error("验配码生成失败，请重试");
+         }
+ 
++        // 解析 devices 数组（兼容旧格式 deviceInfo 单对象）
++        List<Map<String, Object>> devices = new ArrayList<>();
++        Object devicesObj = params.get("devices");
++        if (devicesObj instanceof List) {
++            devices = (List<Map<String, Object>>) devicesObj;
++        } else if (params.get("deviceInfo") instanceof Map) {
++            // 兼容旧格式：单个 deviceInfo 转为 devices 数组
++            devices.add((Map<String, Object>) params.get("deviceInfo"));
++        }
++
+         // 存储会话信息
+         Map<String, Object> session = new HashMap<>();
+         session.put("code", code);
+         session.put("userId", params.get("userId"));
+-        session.put("deviceInfo", params.get("deviceInfo"));
++        session.put("devices", devices);
+         session.put("createdAt", java.time.LocalDateTime.now().toString());
+         session.put("status", "waiting");
+         sessions.put(sessionId, session);
+ 
+-        // 解析 deviceInfo 并持久化到数据库
+-        Object deviceInfoObj = params.get("deviceInfo");
+-        if (deviceInfoObj instanceof Map) {
+-            @SuppressWarnings("unchecked")
+-            Map<String, Object> deviceInfo = (Map<String, Object>) deviceInfoObj;
+-            FittingSession fittingSession = new FittingSession();
+-            fittingSession.setSessionId(sessionId);
+-            Object userIdObj = params.get("userId");
+-            fittingSession.setUserId(userIdObj != null ? Long.valueOf(userIdObj.toString()) : null);
+-            fittingSession.setCode(code);
+-            fittingSession.setStatus("waiting");
+-            fittingSession.setCreatedAt(java.time.LocalDateTime.now());
+-            fittingSession.setExpireTime(java.time.LocalDateTime.now().plusMinutes(30));
+-            fittingSession.setMaterialNo(deviceInfo.get("materialNo") != null ? deviceInfo.get("materialNo").toString() : null);
+-            fittingSession.setSn(deviceInfo.get("sn") != null ? deviceInfo.get("sn").toString() : null);
+-            fittingSession.setEar(deviceInfo.get("ear") != null ? deviceInfo.get("ear").toString() : null);
+-            fittingSession.setModel(deviceInfo.get("model") != null ? deviceInfo.get("model").toString() : null);
+-
+-            // 处理听力图数据（88字节 = 44个Short）
+-            Object audiogramObj = params.get("audiogram");
+-            if (audiogramObj != null) {
++        // 持久化到数据库
++        FittingSession fittingSession = new FittingSession();
++        fittingSession.setSessionId(sessionId);
++        Object userIdObj = params.get("userId");
++        fittingSession.setUserId(userIdObj != null ? Long.valueOf(userIdObj.toString()) : null);
++        fittingSession.setCode(code);
++        fittingSession.setStatus("waiting");
++        fittingSession.setCreatedAt(java.time.LocalDateTime.now());
++        fittingSession.setExpireTime(java.time.LocalDateTime.now().plusMinutes(30));
++        fittingSessionMapper.insert(fittingSession);
++
++        // 批量插入设备记录到 FittingSessionDevice 表
++        for (Map<String, Object> device : devices) {
++            FittingSessionDevice deviceRecord = new FittingSessionDevice();
++            deviceRecord.setSessionId(sessionId);
++            deviceRecord.setEar(device.get("ear") != null ? device.get("ear").toString() : null);
++            deviceRecord.setSn(device.get("sn") != null ? device.get("sn").toString() : null);
++            deviceRecord.setMaterialNo(device.get("materialNo") != null ? device.get("materialNo").toString() : null);
++            deviceRecord.setModel(device.get("model") != null ? device.get("model").toString() : null);
++            deviceRecord.setCreatedAt(java.time.LocalDateTime.now());
++            // 初始化当前同步数据（与原始绑定值相同）
++            deviceRecord.setCurrentSn(device.get("sn") != null ? device.get("sn").toString() : null);
++            deviceRecord.setCurrentMaterialNo(device.get("materialNo") != null ? device.get("materialNo").toString() : null);
++
++            // 处理听力图数据
++            Object audiogramObj = device.get("audiogram");
++            if (audiogramObj instanceof String) {
+                 try {
+-                    if (audiogramObj instanceof String) {
+-                        // Base64 编码的听力图数据
+-                        fittingSession.setAudiogram(Base64.getDecoder().decode((String) audiogramObj));
+-                    } else if (audiogramObj instanceof byte[]) {
+-                        fittingSession.setAudiogram((byte[]) audiogramObj);
+-                    }
++                    deviceRecord.setAudiogram(Base64.getDecoder().decode((String) audiogramObj));
+                 } catch (Exception e) {
+                     System.out.println("Error decoding audiogram: " + e.getMessage());
+                 }
+             }
+-
+-            fittingSessionMapper.insert(fittingSession);
++            fittingSessionDeviceMapper.insert(deviceRecord);
+         }
+ 
+         Map<String, Object> result = new HashMap<>();
+@@ -127,30 +149,39 @@ public class FittingController {
+             return ApiResponse.error("验配码不存在");
+         }
+ 
++        // 从数据库查询会话状态（优先使用数据库状态，因为验配师断开时会更新数据库）
++        FittingSession dbSession = fittingSessionMapper.selectOne(
++            new QueryWrapper<FittingSession>().eq("code", code)
++        );
++
+         // 检查会话状态，如果是 active 说明已有人加入（1对1限制）
+-        String status = (String) session.get("status");
++        // 优先检查数据库状态
++        String status = dbSession != null ? dbSession.getStatus() : (String) session.get("status");
+         if ("active".equals(status)) {
+             return ApiResponse.error("会话已满，无法加入");
+         }
+ 
+-        // 从数据库查询会话获取设备信息
+-        FittingSession dbSession = fittingSessionMapper.selectOne(
+-            new QueryWrapper<FittingSession>().eq("code", code)
+-        );
+-
+         Map<String, Object> result = new HashMap<>();
+         result.put("sessionId", sessionId);
+         result.put("userId", dbSession != null ? dbSession.getUserId() : 1L);
+ 
+-        // 返回设备信息给验配师
+-        Map<String, Object> deviceInfo = new HashMap<>();
+-        if (dbSession != null) {
+-            deviceInfo.put("materialNo", dbSession.getMaterialNo());
+-            deviceInfo.put("sn", dbSession.getSn());
+-            deviceInfo.put("ear", dbSession.getEar());
+-            deviceInfo.put("model", dbSession.getModel() != null ? dbSession.getModel() : "");
++        // 查询会话关联的设备列表
++        List<FittingSessionDevice> deviceList = fittingSessionDeviceMapper.selectList(
++            new QueryWrapper<FittingSessionDevice>().eq("session_id", sessionId)
++        );
++
++        // 返回设备列表给验配师（使用current开头的实时同步数据）
++        List<Map<String, Object>> devices = new ArrayList<>();
++        for (FittingSessionDevice device : deviceList) {
++            Map<String, Object> deviceInfo = new HashMap<>();
++            deviceInfo.put("ear", device.getEar());
++            // 优先使用当前同步数据，如果没有则用原始绑定值
++            deviceInfo.put("sn", device.getCurrentSn() != null ? device.getCurrentSn() : device.getSn());
++            deviceInfo.put("materialNo", device.getCurrentMaterialNo() != null ? device.getCurrentMaterialNo() : device.getMaterialNo());
++            deviceInfo.put("model", device.getModel() != null ? device.getModel() : "");
++            devices.add(deviceInfo);
+         }
+-        result.put("deviceInfo", deviceInfo);
++        result.put("devices", devices);
+ 
+         // 更新会话状态为 active
+         session.put("status", "active");
+@@ -179,24 +210,29 @@ public class FittingController {
+     @PostMapping("/verify-device")
+     public ApiResponse<Map<String, Object>> verifyDevice(@RequestBody Map<String, Object> params) {
+         String sessionId = (String) params.get("sessionId");
++        String targetEar = (String) params.get("targetEar");
+         String materialNo = (String) params.get("materialNo");
+         String sn = (String) params.get("sn");
+ 
+-        // 查询会话
+-        FittingSession dbSession = fittingSessionMapper.selectOne(
+-            new QueryWrapper<FittingSession>().eq("session_id", sessionId)
++        // 查询目标耳朵的设备
++        List<FittingSessionDevice> devices = fittingSessionDeviceMapper.selectList(
++            new QueryWrapper<FittingSessionDevice>()
++                .eq("session_id", sessionId)
++                .eq("ear", targetEar)
+         );
+ 
+-        if (dbSession == null) {
++        if (devices.isEmpty()) {
+             return ApiResponse.success(Map.of(
+                 "verified", false,
+-                "message", "会话不存在"
++                "message", "会话中未找到" + ("left".equals(targetEar) ? "左耳" : "右耳") + "设备"
+             ));
+         }
+ 
++        FittingSessionDevice deviceRecord = devices.get(0);
++
+         // 比对设备信息
+-        boolean materialMatch = dbSession.getMaterialNo() != null && dbSession.getMaterialNo().equals(materialNo);
+-        boolean snMatch = dbSession.getSn() != null && dbSession.getSn().equals(sn);
++        boolean materialMatch = deviceRecord.getMaterialNo() != null && deviceRecord.getMaterialNo().equals(materialNo);
++        boolean snMatch = deviceRecord.getSn() != null && deviceRecord.getSn().equals(sn);
+ 
+         boolean verified = materialMatch && snMatch;
+         String message;
+@@ -212,7 +248,8 @@ public class FittingController {
+         webSocketHandler.broadcastToSession(sessionId, msgType, Map.of(
+             "verified", verified,
+             "message", message,
+-            "sessionId", sessionId
++            "sessionId", sessionId,
++            "targetEar", targetEar
+         ));
+ 
+         return ApiResponse.success(Map.of(
+@@ -221,6 +258,137 @@ public class FittingController {
+         ));
+     }
+ 
++    @PostMapping("/session/{sessionId}/update-device")
++    public ApiResponse<Map<String, Object>> updateDevice(@PathVariable String sessionId, @RequestBody Map<String, Object> params) {
++        Map<String, Object> deviceInfo = (Map<String, Object>) params.get("deviceInfo");
++        if (deviceInfo == null) {
++            return ApiResponse.error("设备信息不能为空");
++        }
++
++        String ear = (String) deviceInfo.get("ear");
++        String sn = (String) deviceInfo.get("sn");
++        String materialNo = (String) deviceInfo.get("materialNo");
++        String model = (String) deviceInfo.get("model");
++
++        // 查询并更新指定耳朵的设备记录
++        List<FittingSessionDevice> devices = fittingSessionDeviceMapper.selectList(
++            new QueryWrapper<FittingSessionDevice>()
++                .eq("session_id", sessionId)
++                .eq("ear", ear)
++        );
++
++        if (devices.isEmpty()) {
++            return ApiResponse.error("会话中未找到" + ("left".equals(ear) ? "左耳" : "right".equals(ear) ? "右耳" : ear) + "设备");
++        }
++
++        FittingSessionDevice deviceRecord = devices.get(0);
++        // 只更新当前同步数据，不更新原始绑定值（用于烧录验证）
++        if (sn != null) deviceRecord.setCurrentSn(sn);
++        if (materialNo != null) deviceRecord.setCurrentMaterialNo(materialNo);
++        if (model != null) deviceRecord.setModel(model);
++        fittingSessionDeviceMapper.updateById(deviceRecord);
++
++        // 同步成功后立即通过WebSocket通知验配端
++        webSocketHandler.broadcastToSession(sessionId, "device_updated", Map.of(
++            "ear", ear,
++            "sn", sn != null ? sn : "",
++            "materialNo", materialNo != null ? materialNo : "",
++            "model", model != null ? model : ""
++        ));
++
++        return ApiResponse.success(Map.of("success", true, "message", "设备信息已更新"));
++    }
++
++    @PostMapping("/session/{sessionId}/send")
++    public ApiResponse<Map<String, Object>> sendFitting(
++            @PathVariable String sessionId,
++            @RequestBody Map<String, Object> params) {
++
++        String targetEar = (String) params.get("targetEar");
++        String type = (String) params.get("type");
++        Object data = params.get("data");
++
++        if (targetEar == null || targetEar.isEmpty()) {
++            return ApiResponse.error("targetEar不能为空");
++        }
++
++        // 检查是否有正在进行的操作（试听和烧录都需要锁定）
++        Map<String, Object> currentOp = operatingSessions.get(sessionId);
++        if (currentOp != null) {
++            String busyEar = (String) currentOp.get("targetEar");
++            String opType = (String) currentOp.get("type");
++            return ApiResponse.error((busyEar.equals("left") ? "左耳" : "右耳") + "正在" + ("trial".equals(opType) ? "试听" : "烧录") + "中，请等待");
++        }
++
++        // 查询目标耳朵的设备是否存在
++        List<FittingSessionDevice> devices = fittingSessionDeviceMapper.selectList(
++            new QueryWrapper<FittingSessionDevice>()
++                .eq("session_id", sessionId)
++                .eq("ear", targetEar)
++        );
++
++        if (devices.isEmpty()) {
++            return ApiResponse.error("用户未连接" + ("left".equals(targetEar) ? "左耳" : "右耳") + "设备");
++        }
++
++        FittingSessionDevice targetDevice = devices.get(0);
++
++        // 标记操作开始（试听和烧录都需要锁定）
++        operatingSessions.put(sessionId, Map.of(
++            "targetEar", targetEar,
++            "type", type != null ? type : "trial",
++            "startTime", System.currentTimeMillis()
++        ));
++
++        try {
++            // 构建消息内容，增加 targetEar 字段
++            Map<String, Object> messageData = new HashMap<>();
++            messageData.put("targetEar", targetEar);
++            messageData.put("deviceSn", targetDevice.getSn());
++            messageData.put("materialNo", targetDevice.getMaterialNo());
++            messageData.put("type", type);
++            if (data != null) {
++                messageData.put("data", data);
++            }
++
++            // 根据 type 决定消息类型
++            String msgType = "trial".equals(type) ? "trial_received" : "verification_required";
++
++            // 通过 WebSocket 发送
++            webSocketHandler.broadcastToSession(sessionId, msgType, messageData);
++
++            Map<String, Object> result = new HashMap<>();
++            result.put("success", true);
++            result.put("targetEar", targetEar);
++            return ApiResponse.success(result);
++        } catch (Exception e) {
++            // 发送失败时移除操作状态
++            operatingSessions.remove(sessionId);
++            throw e;
++        }
++    }
++
++    // 完成操作时调用（用户端确认烧录完成）
++    @PostMapping("/session/{sessionId}/complete-operation")
++    public ApiResponse<Map<String, Object>> completeOperation(@PathVariable String sessionId,
++            @RequestBody Map<String, Object> params) {
++        operatingSessions.remove(sessionId);
++
++        // 获取烧录结果并通知验配师
++        String targetEar = params.get("targetEar") != null ? params.get("targetEar").toString() : "left";
++        boolean success = params.get("success") != null ? (Boolean) params.get("success") : true;
++
++        if (success) {
++            webSocketHandler.broadcastToSession(sessionId, "burn_complete", Map.of(
++                "targetEar", targetEar,
++                "success", true,
++                "message", "用户已完成" + ("left".equals(targetEar) ? "左耳" : "右耳") + "烧录"
++            ));
++        }
++
++        return ApiResponse.success(Map.of("success", true));
++    }
++
+     private static final long MAX_FILE_SIZE = 40 * 1024; // 40KB
+ 
+     @PostMapping("/upload")
+diff --git a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/mapper/FittingSessionDeviceMapper.java b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/mapper/FittingSessionDeviceMapper.java
+new file mode 100644
+index 0000000..5215bc0
+--- /dev/null
++++ b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/mapper/FittingSessionDeviceMapper.java
+@@ -0,0 +1,9 @@
++package com.heafitmp.fitting.mapper;
++
++import com.baomidou.mybatisplus.core.mapper.BaseMapper;
++import com.heafitmp.common.entity.FittingSessionDevice;
++import org.apache.ibatis.annotations.Mapper;
++
++@Mapper
++public interface FittingSessionDeviceMapper extends BaseMapper<FittingSessionDevice> {
++}
+diff --git a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java
+index 639cfcd..0a9b5de 100644
+--- a/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java
++++ b/HeafitMP-fitting-service/src/main/java/com/heafitmp/fitting/websocket/FittingWebSocketHandler.java
+@@ -2,6 +2,8 @@ package com.heafitmp.fitting.websocket;
+ 
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.heafitmp.common.entity.FittingSession;
++import com.heafitmp.common.entity.FittingSessionDevice;
++import com.heafitmp.fitting.mapper.FittingSessionDeviceMapper;
+ import com.heafitmp.fitting.mapper.FittingSessionMapper;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Component;
+@@ -11,6 +13,8 @@ import org.springframework.web.socket.WebSocketSession;
+ import org.springframework.web.socket.handler.TextWebSocketHandler;
+ 
+ import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+@@ -21,18 +25,28 @@ public class FittingWebSocketHandler extends TextWebSocketHandler {
+     private final Map<String, String> sessionUserMap = new ConcurrentHashMap<>();
+     // 维护 fitting session -> 订阅的 WebSocket session ID 集合
+     private final Map<String, Set<String>> sessionSubscriptions = new ConcurrentHashMap<>();
++    // 追踪每个 WebSocket session 的角色：user 或 fitter
++    private final Map<String, String> sessionRoleMap = new ConcurrentHashMap<>();
++    // 追踪每个 fitting session 的订阅者角色：fittingSessionId -> (wsSessionId -> role)
++    private final Map<String, Map<String, String>> sessionSubscriberRoles = new ConcurrentHashMap<>();
+     private final ObjectMapper objectMapper = new ObjectMapper();
+ 
+     @Autowired
+     private FittingSessionMapper fittingSessionMapper;
+ 
++    @Autowired
++    private FittingSessionDeviceMapper fittingSessionDeviceMapper;
++
+     @Override
+     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+         String query = session.getUri().getQuery();
+         String token = extractParam(query, "token");
++        String role = extractParam(query, "role");
+         sessions.put(session.getId(), session);
+         sessionUserMap.put(session.getId(), token);
+-        System.out.println("WebSocket connected: " + session.getId());
++        // 保存角色，默认为 user
++        sessionRoleMap.put(session.getId(), role.isEmpty() ? "user" : role);
++        System.out.println("WebSocket connected: " + session.getId() + ", role: " + sessionRoleMap.get(session.getId()));
+         sendMessage(session, "connected", Map.of("sessionId", session.getId()));
+     }
+ 
+@@ -60,24 +74,27 @@ public class FittingWebSocketHandler extends TextWebSocketHandler {
+         }
+     }
+ 
+-    // 获取心跳时返回的设备信息
++    // 获取心跳时返回的设备信息（改为返回设备列表）
+     private Map<String, Object> getHeartbeatDeviceInfo(String fittingSessionId) {
+         if (fittingSessionId == null || fittingSessionId.isEmpty()) {
+             return Map.of();
+         }
+         try {
+-            FittingSession dbSession = fittingSessionMapper.selectOne(
+-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<FittingSession>()
++            List<FittingSessionDevice> devices = fittingSessionDeviceMapper.selectList(
++                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<FittingSessionDevice>()
+                     .eq("session_id", fittingSessionId)
+             );
+-            if (dbSession != null) {
+-                return Map.of(
+-                    "ear", dbSession.getEar() != null ? dbSession.getEar() : "",
+-                    "model", dbSession.getModel() != null ? dbSession.getModel() : "",
+-                    "sn", dbSession.getSn() != null ? dbSession.getSn() : "",
+-                    "materialNo", dbSession.getMaterialNo() != null ? dbSession.getMaterialNo() : ""
+-                );
++
++            List<Map<String, Object>> deviceList = new ArrayList<>();
++            for (FittingSessionDevice device : devices) {
++                deviceList.add(Map.of(
++                    "ear", device.getEar() != null ? device.getEar() : "",
++                    "model", device.getModel() != null ? device.getModel() : "",
++                    "sn", device.getSn() != null ? device.getSn() : "",
++                    "materialNo", device.getMaterialNo() != null ? device.getMaterialNo() : ""
++                ));
+             }
++            return Map.of("devices", deviceList);
+         } catch (Exception e) {
+             System.out.println("Error fetching device info for heartbeat: " + e.getMessage());
+         }
+@@ -87,7 +104,11 @@ public class FittingWebSocketHandler extends TextWebSocketHandler {
+     private void handleSubscribe(WebSocketSession session, String fittingSessionId) {
+         // 注册订阅关系
+         sessionSubscriptions.computeIfAbsent(fittingSessionId, k -> ConcurrentHashMap.newKeySet()).add(session.getId());
+-        System.out.println("Session " + session.getId() + " subscribed to " + fittingSessionId);
++        // 保存订阅者的角色
++        String role = sessionRoleMap.getOrDefault(session.getId(), "user");
++        sessionSubscriberRoles.computeIfAbsent(fittingSessionId, k -> new ConcurrentHashMap<>())
++            .put(session.getId(), role);
++        System.out.println("Session " + session.getId() + " (" + role + ") subscribed to " + fittingSessionId);
+         sendMessage(session, "subscribed", Map.of("sessionId", fittingSessionId));
+     }
+ 
+@@ -122,13 +143,81 @@ public class FittingWebSocketHandler extends TextWebSocketHandler {
+ 
+     @Override
+     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+-        sessions.remove(session.getId());
+-        sessionUserMap.remove(session.getId());
+-        // 从所有订阅列表中移除
+-        for (Set<String> subscribers : sessionSubscriptions.values()) {
+-            subscribers.remove(session.getId());
++        String wsSessionId = session.getId();
++        String role = sessionRoleMap.getOrDefault(wsSessionId, "user");
++
++        sessions.remove(wsSessionId);
++        sessionUserMap.remove(wsSessionId);
++        sessionRoleMap.remove(wsSessionId);
++
++        // 从所有订阅列表中移除，并处理断开逻辑
++        for (Map.Entry<String, Set<String>> entry : sessionSubscriptions.entrySet()) {
++            String fittingSessionId = entry.getKey();
++            Set<String> subscribers = entry.getValue();
++
++            if (subscribers.contains(wsSessionId)) {
++                subscribers.remove(wsSessionId);
++                Map<String, String> subscriberRoles = sessionSubscriberRoles.get(fittingSessionId);
++                if (subscriberRoles != null) {
++                    subscriberRoles.remove(wsSessionId);
++                }
++
++                // 根据角色处理断开
++                if ("fitter".equals(role)) {
++                    // 验配师断开：重置会话状态为 waiting，允许重新加入
++                    System.out.println("Fitter disconnected, resetting session " + fittingSessionId + " to waiting");
++                    resetSessionToWaiting(fittingSessionId);
++                    // 通知用户验配师断开了
++                    broadcastToSession(fittingSessionId, "fitter_disconnected", Map.of(
++                        "message", "验配师已断开连接"
++                    ));
++                } else {
++                    // 用户断开：关闭会话，通知验配师
++                    System.out.println("User disconnected, closing session " + fittingSessionId);
++                    closeSession(fittingSessionId);
++                    // 通知验配师用户断开了
++                    broadcastToSession(fittingSessionId, "user_disconnected", Map.of(
++                        "message", "用户已断开连接，请检查网络"
++                    ));
++                }
++            }
++        }
++
++        System.out.println("WebSocket closed: " + wsSessionId + ", role: " + role);
++    }
++
++    // 重置会话状态为 waiting（验配师断开时调用）
++    private void resetSessionToWaiting(String fittingSessionId) {
++        try {
++            FittingSession dbSession = fittingSessionMapper.selectOne(
++                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<FittingSession>()
++                    .eq("session_id", fittingSessionId)
++            );
++            if (dbSession != null) {
++                dbSession.setStatus("waiting");
++                fittingSessionMapper.updateById(dbSession);
++                System.out.println("Session " + fittingSessionId + " reset to waiting");
++            }
++        } catch (Exception e) {
++            System.out.println("Error resetting session to waiting: " + e.getMessage());
++        }
++    }
++
++    // 关闭会话（用户断开时调用）
++    private void closeSession(String fittingSessionId) {
++        try {
++            FittingSession dbSession = fittingSessionMapper.selectOne(
++                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<FittingSession>()
++                    .eq("session_id", fittingSessionId)
++            );
++            if (dbSession != null) {
++                dbSession.setStatus("closed");
++                fittingSessionMapper.updateById(dbSession);
++                System.out.println("Session " + fittingSessionId + " closed");
++            }
++        } catch (Exception e) {
++            System.out.println("Error closing session: " + e.getMessage());
+         }
+-        System.out.println("WebSocket closed: " + session.getId());
+     }
+ 
+     // 广播消息到指定会话的所有订阅者
+diff --git a/migrations/003_add_fitting_session_devices.sql b/migrations/003_add_fitting_session_devices.sql
+new file mode 100644
+index 0000000..0776b41
+--- /dev/null
++++ b/migrations/003_add_fitting_session_devices.sql
+@@ -0,0 +1,12 @@
++-- 新增验配会话设备表（支持双耳）
++CREATE TABLE IF NOT EXISTS `fitting_session_devices` (
++  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
++  `session_id` VARCHAR(64) NOT NULL COMMENT '关联FittingSession的sessionId',
++  `ear` VARCHAR(16) DEFAULT NULL COMMENT 'left/right',
++  `sn` VARCHAR(64) DEFAULT NULL COMMENT '序列号',
++  `material_no` VARCHAR(64) DEFAULT NULL COMMENT '物料号',
++  `model` VARCHAR(128) DEFAULT NULL COMMENT '型号',
++  `audiogram` BLOB DEFAULT NULL COMMENT '听力图数据',
++  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
++  INDEX `idx_session_id` (`session_id`)
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='验配会话设备表';

@@ -1,0 +1,174 @@
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-23-    IO_CAPABILITY_KEYBOARD_ONLY,
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-24-    IO_CAPABILITY_NO_INPUT_NO_OUTPUT,
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-25-    IO_CAPABILITY_KEYBOARD_DISPLAY, // not used by secure simple pairing
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-26-} io_capability_t;
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-27-
+sdk/include_lib/btstack/le/sm.h:28:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-29-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-30-void ble_cbk_handler_register(btstack_packet_handler_t packet_cbk, sm_stack_packet_handler_t sm_cbk);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-31-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-32-void sm_just_works_confirm(hci_con_handle_t con_handle);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/include_lib/btstack/le/sm.h-33-
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-725-#else
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-726-    *key = 123456; //for debug
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-727-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-728-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-729-
+sdk/apps/earphone/tuya/tuya_demo.c:730:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-731-{
+sdk/apps/earphone/tuya/tuya_demo.c-732-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-733-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-734-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-735-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-747-{
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-748-    log_info("TUYA ble profile init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-749-    le_device_db_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-750-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-751-#if PASSKEY_ENTER_ENABLE
+sdk/apps/earphone/tuya/tuya_demo.c:752:    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION, 7, TY_TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-753-#else
+sdk/apps/earphone/tuya/tuya_demo.c:754:    /* ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, TY_TCFG_BLE_SECURITY_EN); */
+sdk/apps/earphone/tuya/tuya_demo.c:755:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, TY_TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-756-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-757-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-758-    /* setup ATT server */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-759-    att_server_init(profile_data, att_read_callback, att_write_callback);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/tuya/tuya_demo.c-760-    att_server_register_packet_handler(cbk_packet_handler);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-645-#else
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-646-    *key = 123456; //for debug
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-647-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-648-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-649-
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c:650:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-651-{
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-652-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-653-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-654-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-655-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-667-{
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-668-    printf("ble profile init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-669-    le_device_db_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-670-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-671-#if PASSKEY_ENTER_ENABLE
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c:672:    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-673-#else
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c:674:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-675-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-676-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-677-    /* setup ATT server */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-678-    att_server_init(profile_data, att_read_callback, att_write_callback);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_server.c-679-    att_server_register_packet_handler(cbk_packet_handler);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1274-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1275-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1276-#if 0
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1277-//协议栈内部调用
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1278-extern void sm_set_master_request_pair(int enable);
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c:1279:static void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1280-{
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1281-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1282-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1283-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1284-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1299-    log_info("ble profile init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1300-    le_device_db_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1301-    ble_stack_gatt_role(1);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1302-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1303-//#if PASSKEY_ENTER_ENABLE
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c:1304://    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING, 7, client_config->security_en);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1305-//#else
+sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c:1306://    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, client_config->security_en);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1307-//#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1308-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1309-    /* setup ATT client */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1310-    gatt_client_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/wireless_mic/le_wireless_mic_client.c-1311-    gatt_client_register_packet_handler(cbk_packet_handler);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1065-#else
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1066-    *key = 123456; //for debug
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1067-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1068-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1069-
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c:1070:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1071-{
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1072-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1073-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1074-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1075-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1095-	printf("le_device_db_init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1096-    le_device_db_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1097-	
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1098-#if TCFG_BLE_BRIDGE_EDR_ENALBE
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1099-	
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c:1100:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1101-#if !TRANS_ANCS_EN && !SMART_TCFG_BLE_SECURITY_EN
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1102-    gatt_client_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1103-    gatt_client_check_ios_config(2);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1104-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1105-#elif PASSKEY_ENTER_ENABLE
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c:1106:    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1107-#else
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c:1108:	printf("ble_sm_setup_init\n");
+sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c:1109:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1110-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1111-	printf("att_server_init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1112-    /* setup ATT server */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1113-    att_server_init(profile_data, att_read_callback, att_write_callback);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c-1114-	printf("att_server_register_packet_handler\n");
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-786-    }
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-787-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-788-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-789-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-790-
+sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c:791:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-792-{
+sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-793-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-794-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-795-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-796-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-803-extern void le_device_db_init(void);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-804-void ble_profile_init(void)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-805-{
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-806-    printf("ble profile init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-807-    le_device_db_init();
+sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c:808:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-809-    /* setup ATT server */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-810-    att_server_init(profile_data, att_read_callback, att_write_callback);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-811-    att_server_register_packet_handler(cbk_packet_handler);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-812-    /* gatt_client_register_packet_handler(packet_cbk); */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data/le_rcsp_adv_module.c-813-
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-898-#else
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-899-    *key = 123456; //for debug
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-900-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-901-}
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-902-
+sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c:903:void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-904-{
+sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-905-    /setup SM: Display only
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-906-    sm_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-907-    sm_set_io_capabilities(io_type);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-908-    sm_set_authentication_requirements(auth_req);
+--
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-920-{
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-921-    printf("LL sync ble profile init\n");
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-922-    le_device_db_init();
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-923-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-924-#if PASSKEY_ENTER_ENABLE
+sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c:925:    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-926-#else
+sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c:927:    /* ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, TCFG_BLE_SECURITY_EN); */
+sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c:928:    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING, 7, 0);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-929-#endif
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-930-
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-931-    /* setup ATT server */
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-932-    att_server_init(profile_data, NULL, att_write_callback);
+/mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/Tecent_LL/tecent_ll_demo/ll_demo.c-933-    att_server_register_packet_handler(cbk_packet_handler);

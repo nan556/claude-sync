@@ -1,0 +1,210 @@
+[1m[36m[Ble_Ac7006] recent context, 2026-05-12 10:36am GMT+8[0m
+[90m────────────────────────────────────────────────────────────[0m
+
+[2mLegend: session-request | 🔴 bugfix | 🟣 feature | 🔄 refactor | ✅ change | 🔵 discovery | ⚖️ decision[0m
+
+[1mColumn Key[0m
+[2m  Read: Tokens to read this observation (cost to learn it now)[0m
+[2m  Work: Tokens spent on work that produced this record ( research, building, deciding)[0m
+
+[2mContext Index: This semantic index (titles, types, files, tokens) is usually sufficient to understand past work.[0m
+
+[2mWhen you need implementation details, rationale, or debugging context:[0m
+[2m  - Fetch by ID: get_observations([IDs]) for observations visible in this index[0m
+[2m  - Search history: Use the mem-search skill for past decisions, bugs, and deeper research[0m
+[2m  - Trust this index over re-reading code for past decisions and learnings[0m
+
+[1m[36mContext Economics[0m
+[2m  Loading: 100 observations (22,423 tokens to read)[0m
+[2m  Work investment: 1,164,317 tokens spent on research, building, and decisions[0m
+[32m  Your savings: 98% reduction from reuse[0m
+
+[1m[36mApr 10, 2026[0m
+
+[33m#S1[0m Understanding the claude-api skill and resolving claude-mem invocation errors (Apr 10, 10:51 AM)
+
+
+[1m[36mMay 7, 2026[0m
+
+[2mBLE通讯协议_V1.3.docx[0m
+  [2m#2228[0m  [2m2:59 PM[0m  🟣  BLE Communication Protocol V1.3 and AC700N Module Updates  
+[2mGeneral[0m
+  [2m#2235[0m  [2m3:08 PM[0m  🔵  iOS BLE断链问题根因：配对弹窗触发经典蓝牙回连  
+  [2m#2236[0m  [2m3:09 PM[0m  ⚖️  BLE Bonding Configuration Decision for Dual-Mode iOS Devices  
+  [2m#2237[0m  [2m3:10 PM[0m  🔵  Project uses dual-mode Bluetooth with Classic/BLE configuration  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2238[0m           🔵  BLE-to-EDR bridge security configuration in le_trans_data.c  
+[2msdk/apps/common/config/include/bt_profile_cfg.h[0m
+  [2m#2239[0m  [2m3:11 PM[0m  🔵  BLE demo profile selection architecture in JL700N SDK  
+[2mGeneral[0m
+  [2m#2240[0m  [2m3:12 PM[0m  🔵  BLE/Classic BT Mode System Investigation  
+[2msdk/apps/common/HJX/HJX_Tsk.h[0m
+  [2m#2241[0m           🔵  bleflag Variable Locations Identified  
+[2mGeneral[0m
+  [2m#2242[0m  [2m3:14 PM[0m  🔵  Incomplete analysis request - "analyze b"  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2243[0m  [2m3:15 PM[0m  🔵  BLE security initialization found in trans_data demo  
+[2mGeneral[0m
+  [2m#2244[0m  [2m4:14 PM[0m  🔴  Dialog suppression fix incomplete  
+  [2m#2245[0m           🔵  BLE security IO_CAPABILITY configuration locations  
+  [2m#2246[0m  [2m4:15 PM[0m  🔵  Restoring comments in code  
+  [2m#2247[0m  [2m4:22 PM[0m  🔵  Gitignore rule stopped working for files  
+  [2m#2248[0m  [2m4:30 PM[0m  🔵  Session activity minimal - no new technical work observed  
+  [2m#2249[0m  [2m4:40 PM[0m  ✅  Firmware reflashed on device  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2250[0m  [2m4:42 PM[0m  ✅  准备翻译并简化C源码文件  
+[2mprocess_comments.py[0m
+  [2m#2251[0m  [2m4:44 PM[0m  🔵  用户意图澄清：需处理le_trans_data.c文件注释  
+[2mGeneral[0m
+  [2m#2252[0m  [2m4:47 PM[0m  ✅  BLE mode should suppress classic Bluetooth connection dialog  
+[2msdk/include_lib/driver/cpu/br36/asm/power/power_api.h[0m
+  [2m#2253[0m           🔵  SDK BLE/Classic Bluetooth toggle mechanism investigation  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2254[0m  [2m4:48 PM[0m  🔵  bleflag variable tracks BLE mode state  
+[2msdk/include_lib/btstack/bt_profile_config.h[0m
+  [2m#2255[0m           🔵  BLE configuration files discovered in SDK  
+[2msdk/apps/earphone/bt_ble.c[0m
+  [2m#2256[0m           🔵  BLE/BREDR mode selection macros found  
+[2msdk/Makefile[0m
+  [2m#2257[0m           🔵  CONFIG_NEW_BREDR_ENABLE compile flag controls BR/EDR inclusion  
+[2msdk/include_lib/btctrler/btctrler_task.h[0m
+  [2m#2258[0m  [2m4:49 PM[0m  🔵  Runtime BR/EDR control functions discovered  
+[2mGeneral[0m
+  [2m#2259[0m  [2m4:51 PM[0m  ✅  AC7006/MMX problem investigation requested  
+[2mhttps://blog.csdn.net/u013820168/article/details/143556114[0m
+  [2m#2260[0m  [2m4:52 PM[0m  🔵  AC7006 BLE模式切换断连问题及解决方案  
+[2mGeneral[0m
+  [2m#2261[0m  [2m4:54 PM[0m  🔴  BLE mode entry requires EDR shutdown  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2262[0m           ✅  Code cleanup in le_trans_data.c reverted  
+[2msdk/apps/earphone/key_event_deal.c[0m
+  [2m#2263[0m           🔵  Bleflag state management found in key_event_deal.c  
+  [2m#2264[0m  [2m4:55 PM[0m  🔵  s_HJXBTEnable function controls Classic BT stack  
+  [2m#2265[0m           🔵  BLE mode entry has multi-step initialization sequence  
+[2mGeneral[0m
+  [2m#2266[0m           🔵  Searching for EDR/BREDR shutdown mechanism  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data_processed.c[0m
+  [2m#2267[0m  [2m4:58 PM[0m  🔵  Investigating JL SDK LE Trans Data Demo file  
+  [2m#2268[0m           ✅  Deleted temporary le_trans_data_processed.c file  
+[2msdk/include_lib/btctrler/btctrler_task.h[0m
+  [2m#2269[0m  [2m4:59 PM[0m  🔵  Found btctrler_task_init_bredr declaration  
+[2mGeneral[0m
+  [2m#2273[0m  [2m5:14 PM[0m  🔵  Found iOS popup workaround code in key_event_deal.c  
+  [2m#2275[0m           🔵  BT control uses separate BLE and Classic BT module functions  
+  [2m#2276[0m  [2m5:15 PM[0m  🔵  Found iOS-specific BR/EDR connection flags in custom_cfg.c  
+  [2m#2277[0m           🔵  VER_FLAG_IOS_BLE_LINK_BREDR enabled but iOS popup still occurring  
+  [2m#2278[0m  [2m5:16 PM[0m  🔵  JL Tech official iOS BT demo and iOS coexistence articles found  
+  [2m#2279[0m           🔵  Found JL article on enabling BLE without Classic BT  
+  [2m#2280[0m  [2m5:17 PM[0m  🔵  JL BLE-only mode article confirms AC632N approach applicable to AC7006  
+  [2m#2282[0m  [2m5:21 PM[0m  🔵  Root cause identified: btctrler_task_close_bredr() missing from other code paths  
+[2msdk/apps/earphone/key_event_deal.c[0m
+  [2m#2283[0m  [2m5:24 PM[0m  ✅  Modified BLE enable timing in case 2 of HJX_KEY_BLE_OPEN  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/key_event_deal.c[0m
+  [2m#2284[0m  [2m5:30 PM[0m  🔴  BLE延迟开启修复设备循环切换模式问题  
+[2mGeneral[0m
+  [2m#2285[0m  [2m5:42 PM[0m  🔵  BLE Pairing Dialog Trigger Conditions  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2286[0m  [2m5:43 PM[0m  🔵  BLE Advertising Data Configuration in JL700N SDK  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/key_event_deal.c[0m
+  [2m#2287[0m           ✅  BLE Activation Timing Changed from Timer to Tone Callback  
+[2minclude_lib/btctrler/btctrler_task.h[0m
+  [2m#2288[0m  [2m5:44 PM[0m  🔵  EDR shutdown prevents iOS pairing popup  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2289[0m  [2m5:45 PM[0m  🔵  BLE connection state management in wireless mic demo  
+[2minclude_lib/btctrler/btctrler_task.h[0m
+  [2m#2290[0m  [2m5:46 PM[0m  🔵  BR/EDR close mechanism exists to prevent iOS pairing popups  
+[2mapps/common/update/update.c[0m
+  [2m#2291[0m           🔵  update_close_hw() iterates update_target list with buggy memcmp filter  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2292[0m           🔵  BLE connection complete handler triggers custom HJX module initialization  
+[2mapps/common/HJX/HJX_Tsk.c[0m
+  [2m#2293[0m  [2m5:47 PM[0m  🔵  s_HJXHAP150SW controls external audio chip power via GPIO/LDO  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2294[0m  [2m5:49 PM[0m  🔵  BLE connection complete handler initializes memory and HAP accessory  
+  [2m#2295[0m           ✅  Added debug printf to BLE connection complete handler  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/earphone.c[0m
+  [2m#2296[0m  [2m5:50 PM[0m  ✅  Added debug printf to BR/EDR connection complete handler  
+[2mGeneral[0m
+  [2m#2297[0m  [2m5:56 PM[0m  🔵  JL700N Bluetooth Audio Device Boot and BLE Connection  
+[2minclude_lib/btstack/btstack_event.h[0m
+  [2m#2298[0m           🔵  BT Stack Disconnection Event Accessors in btstack_event.h  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2299[0m  [2m5:57 PM[0m  🔵  BLE Connection Complete Handler in le_trans_data.c  
+[2mGeneral[0m
+  [2m#2300[0m  [2m5:58 PM[0m  🔵  BLE Pairing Log Comparison: Cancel vs Pair  
+[2minclude_lib/btctrler/btctrler_task.h[0m
+  [2m#2301[0m  [2m6:01 PM[0m  🔵  EDR关闭功能在代码库中的位置已定位  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2304[0m           🔵  BLE连接完成回调中关闭BR/EDR的完整实现  
+[2mapps/earphone/log_config/lib_btctrler_config.c[0m
+  [2m#2302[0m           🔵  蓝牙控制器模块配置发现  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2303[0m           🔵  BLE连接后关闭BR/EDR的逻辑已定位  
+[2mapps/earphone/key_event_deal.c[0m
+  [2m#2305[0m  [2m6:02 PM[0m  🔵  耳机应用中状态切换时关闭EDR的完整上下文  
+  [2m#2306[0m           🔴  修复iOS经典蓝牙配对弹窗问题 - 调整BLE开启时序  
+[2mapps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2307[0m           ✅  从BLE连接完成回调中移除重复关闭BR/EDR的代码  
+[2mGeneral[0m
+  [2m#2308[0m  [2m6:04 PM[0m  🔵  iOS BLE triggers classic Bluetooth pairing on confirm  
+[2mapps/earphone/earphone.c[0m
+  [2m#2309[0m           🔵  Firmware connection state machine for BR/EDR classic Bluetooth  
+[2mGeneral[0m
+  [2m#2310[0m  [2m6:08 PM[0m  🔵  Investigating BLE auto-connect popup behavior  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/key_event_deal.c[0m
+  [2m#2311[0m           ✅  Refactored BLE mode switch timing in key_event_deal.c  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2312[0m  [2m6:09 PM[0m  ✅  Removed debug printfs from BLE and BT connection handlers  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/earphone.c[0m
+  [2m#2313[0m           ✅  Removed debug printf from BT_STATUS_FIRST_CONNECTED handler  
+[2mGeneral[0m
+  [2m#2314[0m  [2m6:10 PM[0m  ✅  Adding logging to classic Bluetooth connection section  
+[2mapps/earphone/earphone.c[0m
+  [2m#2315[0m  [2m6:11 PM[0m  🔵  Classic Bluetooth connection code located in earphone.c  
+  [2m#2316[0m           ✅  Added printf logging to BR/EDR first connection handler  
+[2mGeneral[0m
+  [2m#2317[0m  [2m6:17 PM[0m  🔴  Classic Bluetooth Connection Failure  
+  [2m#2318[0m  [2m6:20 PM[0m  🔴  Classic Bluetooth connection fails after BLE/hearing aid mode switch  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/key_event_deal.c[0m
+  [2m#2319[0m           🔴  Added btctrler_task_init_bredr() to fix BR/EDR reinitialization after BLE mode switch  
+[2mGeneral[0m
+  [2m#2320[0m  [2m6:22 PM[0m  ✅  Temporarily stripping all modifications for base functionality testing  
+[2mapps/earphone/key_event_deal.c[0m
+  [2m#2321[0m           🔴  Removed BR/EDR controller reinitialization from BLE toggle handler  
+  [2m#2322[0m           🔴  Systematic debugging - stripping debug statements and simplifying BT reconnection  
+[2mGeneral[0m
+  [2m#2323[0m  [2m6:27 PM[0m  🟣  Adding print/logging functionality to existing code  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/earphone/earphone.c[0m
+  [2m#2324[0m           🟣  Added BR/EDR connection debug printf  
+  [2m#2325[0m  [2m6:28 PM[0m  🟣  Added HCI connection complete debug printf  
+[2m../../mnt/d/ble_JL700N/Ble_Ac7006/sdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2326[0m           🔵  BLE connection complete handler location  
+
+[1m[36mMay 8, 2026[0m
+
+[2mGeneral[0m
+  [2m#2380[0m  [2m10:20 AM[0m  🔵  BLE Mode BR/EDR Controller Close Attempt  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2381[0m  [2m10:21 AM[0m  🔵  HCI_EIR_DATATYPE_FLAGS Values Found in BLE Advertising  
+[2msdk/apps/earphone/board/br36/board_ac700n_demo_cfg.h[0m
+  [2m#2382[0m            🔵  DOUBLE_BT_SAME_MAC Configuration Controls BR/EDR/BLE Address Sharing  
+[2msdk/apps/earphone/key_event_deal.c[0m
+  [2m#2383[0m            🔵  BLE Mode Entry Calls s_HJXBTEnable(0) to Disable BR/EDR  
+  [2m#2384[0m  [2m10:22 AM[0m  🔵  s_HJXBTEnable Function Controls BR/EDR Power State  
+  [2m#2385[0m            🔵  s_HJXBTEnable Implementation Powers Off BR/EDR  
+[2mGeneral[0m
+  [2m#2386[0m  [2m10:25 AM[0m  🔄  统一打印方式：printf 改为 log_info 或 puts  
+[2msdk/apps/earphone/earphone.c[0m
+  [2m#2387[0m            🔵  项目中 log_info 日志模式确认  
+[2msdk/apps/earphone/key_event_deal.c[0m
+  [2m#2388[0m            🟣  Case 2 增加 BR/EDR 关闭函数调用  
+  [2m#2389[0m  [2m10:26 AM[0m  🟣  Case 1 增加 BR/EDR 初始化函数调用  
+[2msdk/apps/earphone/earphone.c[0m
+  [2m#2390[0m            🔄  earphone.c 中 printf 统一改为 log_info  
+[2msdk/apps/common/third_party_profile/jieli/trans_data_demo/le_trans_data.c[0m
+  [2m#2391[0m            🔄  le_trans_data.c 中 printf 统一改为 log_info  
+
+
+[2mAccess 1164k tokens of past research & decisions for just 22,423t. Use the claude-mem skill to access memories by ID.[0m
+
+View Observations Live @ http://localhost:37777
